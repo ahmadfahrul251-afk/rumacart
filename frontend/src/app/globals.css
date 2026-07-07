@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-poppins: "Poppins", "Inter", sans-serif;
+}
+
+body {
+  background-color: #FAFAFA;
+  color: #202020;
+}
+
+/* Scrollbar tipis, biar tetap terasa clean & modern */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 999px;
+}
+
+.card {
+  @apply bg-white rounded-2xl shadow-card border border-black/5;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-white font-medium shadow-soft transition hover:bg-primary-dark active:scale-95;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-secondary px-5 py-2.5 text-white font-medium shadow-soft transition hover:bg-secondary-dark active:scale-95;
+}
+
+.btn-outline {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-primary text-primary px-5 py-2.5 font-medium transition hover:bg-primary-light active:scale-95;
+}

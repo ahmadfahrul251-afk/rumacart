@@ -1,0 +1,139 @@
+import { prisma } from "../config/db";
+import { selectBestPoint, CartLine } from "./pointSelector.service";
+import { recordCashflow } from "./cashflow.service";
+
+interface CreateOrderInput {
+  customerId: string;
+  addressId?: string;
+  items: CartLine[];
+  shippingMethod: "PICKUP" | "INSTANT" | "SAME_DAY";
+  paymentMethod: "COD" | "TRANSFER" | "EWALLET";
+  voucherCode?: string;
+  notes?: string;
+}
+
+const SHIPPING_COST: Record<string, number> = {
+  PICKUP: 0,
+  SAME_DAY: 9000,
+  INSTANT: 15000,
+};
+
+export async function createOrder(input: CreateOrderInput) {
+  if (!input.items.length) throw new Error("Keranjang kosong");
+
+  // 1. Ambil data produk & harga terbaru dari database (jangan percaya harga dari frontend).
+  const products = await prisma.product.findMany({
+    where: { id: { in: input.items.map((i) => i.productId) } },
+  });
+  const productMap = new Map(products.map((p: any) => [p.id, p]));
+
+  // 2. Tentukan alamat customer (untuk cari Point terdekat).
+  let lat: number | null = null;
+  let lon: number | null = null;
+  let city: string | null = null;
+  if (input.addressId) {
+    const address = await prisma.address.findUnique({ where: { id: input.addressId } });
+    if (address) {
+      lat = address.latitude;
+      lon = address.longitude;
+      city = address.city;
+    }
+  }
+
+  // 3. FITUR UTAMA: pilih Point terdekat yang stoknya cukup.
+  const pointId = await selectBestPoint(input.items, lat, lon, city);
+
+  // 4. Hitung subtotal berdasarkan harga di database (bukan dari client).
+  let subtotal = 0;
+  const orderItemsData = input.items.map((line) => {
+    const product = productMap.get(line.productId);
+    if (!product) throw new Error(`Produk ${line.productId} tidak ditemukan`);
+    const price = product.discountPrice ?? product.sellPrice;
+    const lineSubtotal = price * line.qty;
+    subtotal += lineSubtotal;
+    return { productId: product.id, qty: line.qty, price, subtotal: lineSubtotal };
+  });
+
+  // 5. Voucher (opsional, sederhana: potongan flat).
+  let discount = 0;
+  let voucherId: string | undefined;
+  if (input.voucherCode) {
+    const voucher = await prisma.voucher.findUnique({ where: { code: input.voucherCode } });
+    if (voucher && voucher.isActive && voucher.used < voucher.quota && subtotal >= voucher.minPurchase) {
+      discount = voucher.discountAmount;
+      voucherId = voucher.id;
+    }
+  }
+
+  const shippingCost = SHIPPING_COST[input.shippingMethod] ?? 0;
+  const total = Math.max(subtotal + shippingCost - discount, 0);
+  const orderNumber = generateOrderNumber();
+
+  // 6. Simpan order + kurangi stok di Point terpilih, dalam satu transaction
+  //    supaya konsisten (kalau salah satu gagal, semua dibatalkan).
+  const order = await prisma.$transaction(async (tx: any) => {
+    const created = await tx.order.create({
+      data: {
+        orderNumber,
+        customerId: input.customerId,
+        pointId,
+        addressId: input.addressId,
+        voucherId,
+        shippingMethod: input.shippingMethod,
+        paymentMethod: input.paymentMethod,
+        subtotal,
+        shippingCost,
+        discount,
+        total,
+        notes: input.notes,
+        items: { create: orderItemsData },
+        payment: { create: { method: input.paymentMethod, amount: total, status: "PENDING" } },
+      },
+      include: { items: true, payment: true, point: true },
+    });
+
+    for (const line of input.items) {
+      const inv = await tx.inventory.update({
+        where: { productId_pointId: { productId: line.productId, pointId } },
+        data: { stock: { decrement: line.qty } },
+      });
+      await tx.inventoryHistory.create({
+        data: {
+          inventoryId: inv.id,
+          type: "SALE",
+          qty: line.qty,
+          note: `Order ${orderNumber}`,
+          refId: created.id,
+        },
+      });
+    }
+
+    if (voucherId) {
+      await tx.voucher.update({ where: { id: voucherId }, data: { used: { increment: 1 } } });
+    }
+
+    return created;
+  });
+
+  // 7. Catat cashflow masuk dari penjualan ini.
+  await recordCashflow({
+    type: "IN",
+    category: "Penjualan",
+    amount: total,
+    description: `Order ${orderNumber}`,
+    pointId,
+    refType: "ORDER",
+    refId: order.id,
+  });
+
+  return order;
+}
+
+function generateOrderNumber(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `RC-${y}${m}${d}-${rand}`;
+}

@@ -1,0 +1,301 @@
+// Prisma schema — RumaCart (Fase 1 core models)
+// Dokumentasi lengkap: https://www.prisma.io/docs
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ================== ENUMS ==================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  KASIR
+  GUDANG
+  KURIR
+  CUSTOMER
+}
+
+enum OrderStatus {
+  PENDING       // Menunggu diproses
+  PROCESSED     // Diproses
+  PREPARED      // Disiapkan (picking/packing di gudang)
+  PICKED_UP     // Diambil gudang / siap kirim
+  SHIPPED       // Dikirim
+  COMPLETED     // Selesai
+  CANCELLED     // Dibatalkan
+}
+
+enum ShippingMethod {
+  PICKUP
+  INSTANT
+  SAME_DAY
+}
+
+enum PaymentMethod {
+  COD
+  TRANSFER
+  EWALLET
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+enum InventoryMoveType {
+  STOCK_IN
+  STOCK_OUT
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  SALE
+}
+
+enum CashflowType {
+  IN
+  OUT
+}
+
+// ================== USER & AUTH ==================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  phone        String?
+  role         Role     @default(CUSTOMER)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  addresses      Address[]
+  ordersAsCustomer Order[]  @relation("CustomerOrders")
+  ordersAsCourier  Order[]  @relation("CourierOrders")
+  inventoryMoves   InventoryHistory[]
+  cashflowEntries  Cashflow[]
+
+  @@map("users")
+}
+
+model Address {
+  id            String   @id @default(cuid())
+  userId        String
+  label         String   // "Rumah", "Kos", dst
+  recipientName String
+  phone         String
+  fullAddress   String
+  city          String
+  province      String
+  postalCode    String?
+  latitude      Float?
+  longitude     Float?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// ================== CATALOG ==================
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  icon        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  description   String?
+  categoryId    String
+  brand         String?
+  sku           String   @unique
+  barcode       String?
+  weightGram    Int      @default(0)
+  costPrice     Int      // harga modal, dalam Rupiah (integer, tanpa desimal)
+  sellPrice     Int      // harga jual
+  discountPrice Int?     // harga setelah diskon, jika ada
+  minStock      Int      @default(5)
+  images        String[] @default([])
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category   Category    @relation(fields: [categoryId], references: [id])
+  inventory  Inventory[]
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+// ================== FULFILLMENT POINT & INVENTORY ==================
+
+model FulfillmentPoint {
+  id        String   @id @default(cuid())
+  name      String   // "RumaCart Point A - Bandung Timur"
+  code      String   @unique // "PNT-A"
+  address   String
+  city      String
+  latitude  Float
+  longitude Float
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  inventory Inventory[]
+  orders    Order[]
+  cashflow  Cashflow[]
+
+  @@map("fulfillment_points")
+}
+
+model Inventory {
+  id        String   @id @default(cuid())
+  productId String
+  pointId   String
+  stock     Int      @default(0)
+  minStock  Int      @default(5)
+  updatedAt DateTime @updatedAt
+
+  product Product          @relation(fields: [productId], references: [id])
+  point   FulfillmentPoint @relation(fields: [pointId], references: [id])
+  history InventoryHistory[]
+
+  @@unique([productId, pointId])
+  @@map("inventory")
+}
+
+model InventoryHistory {
+  id          String             @id @default(cuid())
+  inventoryId String
+  type        InventoryMoveType
+  qty         Int                // selalu positif, arah ditentukan oleh `type`
+  note        String?
+  refId       String?            // id order / PO / transfer terkait
+  createdById String?
+  createdAt   DateTime           @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id])
+  createdBy User?     @relation(fields: [createdById], references: [id])
+
+  @@map("inventory_history")
+}
+
+// ================== VOUCHER (sederhana) ==================
+
+model Voucher {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  description    String?
+  discountAmount Int      // potongan dalam Rupiah
+  minPurchase    Int      @default(0)
+  quota          Int      @default(100)
+  used           Int      @default(0)
+  isActive       Boolean  @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+
+  orders Order[]
+
+  @@map("vouchers")
+}
+
+// ================== ORDER ==================
+
+model Order {
+  id             String         @id @default(cuid())
+  orderNumber    String         @unique
+  customerId     String
+  pointId        String
+  addressId      String?
+  courierId      String?
+  voucherId      String?
+  status         OrderStatus    @default(PENDING)
+  shippingMethod ShippingMethod @default(PICKUP)
+  paymentMethod  PaymentMethod  @default(COD)
+  subtotal       Int
+  shippingCost   Int            @default(0)
+  discount       Int            @default(0)
+  total          Int
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  customer User             @relation("CustomerOrders", fields: [customerId], references: [id])
+  courier  User?            @relation("CourierOrders", fields: [courierId], references: [id])
+  point    FulfillmentPoint @relation(fields: [pointId], references: [id])
+  address  Address?         @relation(fields: [addressId], references: [id])
+  voucher  Voucher?         @relation(fields: [voucherId], references: [id])
+  items    OrderItem[]
+  payment  Payment?
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(cuid())
+  orderId   String
+  productId String
+  qty       Int
+  price     Int    // harga satuan saat order dibuat (snapshot)
+  subtotal  Int
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  orderId   String        @unique
+  method    PaymentMethod
+  amount    Int
+  status    PaymentStatus @default(PENDING)
+  paidAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+// ================== CASHFLOW ==================
+
+model Cashflow {
+  id          String       @id @default(cuid())
+  type        CashflowType
+  category    String       // "Penjualan", "Belanja Supplier", "Gaji", dst
+  amount      Int
+  description String?
+  pointId     String?
+  refType     String?      // "ORDER", "EXPENSE", dst
+  refId       String?
+  createdById String?
+  createdAt   DateTime     @default(now())
+
+  point     FulfillmentPoint? @relation(fields: [pointId], references: [id])
+  createdBy User?             @relation(fields: [createdById], references: [id])
+
+  @@map("cashflow")
+}

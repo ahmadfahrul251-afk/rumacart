@@ -1,0 +1,67 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, Package, Truck, ShoppingBag, Wallet, LogOut } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+
+const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
+  ADMIN: [
+    { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
+    { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
+  ],
+  SUPER_ADMIN: [
+    { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
+    { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
+  ],
+  GUDANG: [
+    { href: "/dashboard/gudang", label: "Order Masuk", icon: ShoppingBag },
+    { href: "/dashboard/gudang", label: "Inventory", icon: Package },
+  ],
+  KASIR: [{ href: "/dashboard/kasir", label: "POS", icon: ShoppingBag }],
+  KURIR: [{ href: "/dashboard/kurir", label: "Pengantaran", icon: Truck }],
+};
+
+export function DashboardSidebar({ role }: { role: string }) {
+  const pathname = usePathname();
+  const { logout, user } = useAuth();
+  const links = LINKS[role] || [];
+
+  return (
+    <aside className="hidden w-60 shrink-0 flex-col border-r border-black/5 bg-white p-4 md:flex">
+      <Link href="/" className="mb-6 flex items-center gap-2">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-white font-bold">R</span>
+        <span className="font-bold text-primary">RumaCart</span>
+      </Link>
+
+      <nav className="flex-1 space-y-1">
+        {links.map((link, i) => {
+          const Icon = link.icon;
+          const active = pathname === link.href;
+          return (
+            <Link
+              key={i}
+              href={link.href}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                active ? "bg-primary-light text-primary" : "text-ink/70 hover:bg-accent"
+              }`}
+            >
+              <Icon size={18} /> {link.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-black/5 pt-4">
+        <p className="mb-2 text-xs text-ink/50">{user?.name} · {role}</p>
+        <button onClick={logout} className="flex items-center gap-2 text-sm text-ink/60 hover:text-red-600">
+          <LogOut size={16} /> Keluar
+        </button>
+      </div>
+    </aside>
+  );
+}
