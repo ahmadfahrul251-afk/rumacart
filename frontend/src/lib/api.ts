@@ -30,6 +30,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return json.data;
 }
 
+// Upload file (multipart/form-data) — TIDAK boleh pakai header
+// "Content-Type": "application/json" seperti request() di atas, karena
+// browser perlu menentukan sendiri "boundary" untuk FormData.
+async function uploadFile<T>(path: string, file: File, fieldName = "image"): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("rumacart_token") : null;
+  const formData = new FormData();
+  formData.append(fieldName, file);
+
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData,
+  });
+
+  const json: ApiResponse<T> = await res.json();
+  if (!res.ok || !json.success) {
+    throw new Error(json.message || "Gagal upload file");
+  }
+  return json.data;
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
@@ -39,4 +60,5 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  upload: uploadFile,
 };

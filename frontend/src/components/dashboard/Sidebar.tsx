@@ -2,18 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Truck, ShoppingBag, Wallet, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
   ADMIN: [
     { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
   ],
   SUPER_ADMIN: [
     { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
@@ -21,6 +23,7 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
   GUDANG: [
     { href: "/dashboard/gudang", label: "Order Masuk", icon: ShoppingBag },
     { href: "/dashboard/gudang", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
   ],
   KASIR: [{ href: "/dashboard/kasir", label: "POS", icon: ShoppingBag }],
   KURIR: [{ href: "/dashboard/kurir", label: "Pengantaran", icon: Truck }],
