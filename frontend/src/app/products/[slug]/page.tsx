@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Heart, Share2, MapPin, ShoppingCart } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
+import { StarRating } from "@/components/product/StarRating";
+import { ReviewSection } from "@/components/product/ReviewSection";
 import { api } from "@/lib/api";
 import { Product } from "@/types";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, cn } from "@/lib/utils";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
+import { useWishlist } from "@/lib/wishlist-context";
 
 interface ProductDetail extends Product {
   inventory: { stock: number; point: { name: string; city: string } }[];
@@ -19,6 +23,9 @@ interface ProductDetail extends Product {
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { addItem } = useCart();
+  const { user } = useAuth();
+  const { isWishlisted, toggle } = useWishlist();
+  const router = useRouter();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
@@ -49,6 +56,14 @@ export default function ProductDetailPage() {
     setTimeout(() => setAdded(false), 1500);
   }
 
+  function handleWishlistClick() {
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    toggle(product!.id);
+  }
+
   return (
     <>
       <Navbar />
@@ -66,6 +81,13 @@ export default function ProductDetailPage() {
           <div>
             {product.category && <Badge>{product.category.name}</Badge>}
             <h1 className="mt-3 text-2xl font-bold">{product.name}</h1>
+
+            {(product.totalReviews ?? 0) > 0 && (
+              <div className="mt-1 flex items-center gap-2 text-sm text-ink/60">
+                <StarRating value={product.avgRating ?? 0} />
+                <span>{product.avgRating} ({product.totalReviews} review)</span>
+              </div>
+            )}
 
             <div className="mt-3 flex items-baseline gap-3">
               <span className="text-2xl font-bold text-primary">{formatRupiah(price)}</span>
@@ -99,11 +121,22 @@ export default function ProductDetailPage() {
               <button onClick={handleAddToCart} disabled={totalStock === 0} className="btn-primary flex-1 disabled:opacity-40">
                 <ShoppingCart size={18} /> {added ? "Ditambahkan!" : "Tambah Keranjang"}
               </button>
-              <button className="rounded-xl border border-black/10 p-2.5 hover:bg-accent"><Heart size={18} /></button>
+              <button
+                onClick={handleWishlistClick}
+                className="rounded-xl border border-black/10 p-2.5 hover:bg-accent"
+                aria-label="Simpan ke wishlist"
+              >
+                <Heart
+                  size={18}
+                  className={cn(isWishlisted(product.id) ? "fill-secondary text-secondary" : undefined)}
+                />
+              </button>
               <button className="rounded-xl border border-black/10 p-2.5 hover:bg-accent"><Share2 size={18} /></button>
             </div>
           </div>
         </div>
+
+        <ReviewSection productId={product.id} />
       </main>
       <Footer />
     </>

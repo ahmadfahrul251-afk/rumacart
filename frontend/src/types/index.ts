@@ -22,6 +22,17 @@ export interface Product {
   images: string[];
   category?: Category;
   totalStock?: number;
+  avgRating?: number;
+  totalReviews?: number;
+}
+
+export interface Review {
+  id: string;
+  productId: string;
+  rating: number;
+  comment?: string | null;
+  createdAt: string;
+  user: { name: string };
 }
 
 export interface FulfillmentPoint {

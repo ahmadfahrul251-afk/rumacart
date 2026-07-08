@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Heart, Package } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { useAuth } from "@/lib/auth-context";
@@ -39,6 +41,17 @@ export default function ProfilePage() {
             <p className="font-medium">{user.role}</p>
           </div>
           <button onClick={logout} className="btn-outline mt-4 w-full">Keluar</button>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <Link href="/profile/wishlist" className="card flex items-center gap-3 hover:shadow-soft">
+            <Heart size={20} className="text-secondary" />
+            <span className="text-sm font-medium">Wishlist Saya</span>
+          </Link>
+          <Link href="/orders" className="card flex items-center gap-3 hover:shadow-soft">
+            <Package size={20} className="text-primary" />
+            <span className="text-sm font-medium">Riwayat Order</span>
+          </Link>
         </div>
       </main>
       <Footer />

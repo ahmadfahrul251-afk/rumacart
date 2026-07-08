@@ -1,16 +1,32 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ShoppingCart, Heart } from "lucide-react";
 import { Product } from "@/types";
-import { formatRupiah } from "@/lib/utils";
+import { formatRupiah, cn } from "@/lib/utils";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
+import { useWishlist } from "@/lib/wishlist-context";
 
 export function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
+  const { user } = useAuth();
+  const { isWishlisted, toggle } = useWishlist();
+  const router = useRouter();
   const price = product.discountPrice ?? product.sellPrice;
   const hasDiscount = !!product.discountPrice && product.discountPrice < product.sellPrice;
   const outOfStock = (product.totalStock ?? 1) <= 0;
+  const wishlisted = isWishlisted(product.id);
+
+  function handleWishlistClick(e: React.MouseEvent) {
+    e.preventDefault(); // jangan ikut navigasi ke halaman detail produk
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+    toggle(product.id);
+  }
 
   return (
     <div className="card group flex flex-col overflow-hidden p-0 transition hover:shadow-soft">
@@ -27,6 +43,13 @@ export function ProductCard({ product }: { product: Product }) {
               DISKON
             </span>
           )}
+          <button
+            onClick={handleWishlistClick}
+            className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-white/90 shadow-sm transition hover:scale-110"
+            aria-label="Simpan ke wishlist"
+          >
+            <Heart size={14} className={cn(wishlisted ? "fill-secondary text-secondary" : "text-ink/40")} />
+          </button>
           {outOfStock && (
             <span className="absolute inset-0 grid place-items-center bg-white/70 text-xs font-semibold text-ink/70">
               Stok Habis

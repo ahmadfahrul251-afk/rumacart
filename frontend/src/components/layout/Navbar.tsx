@@ -5,12 +5,15 @@ import { useState } from "react";
 import { ShoppingCart, Search, Menu, X, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
+import { getDashboardPath } from "@/lib/utils";
 
 export function Navbar() {
   const { user, logout } = useAuth();
   const { items } = useCart();
   const [open, setOpen] = useState(false);
   const cartCount = items.reduce((sum, i) => sum + i.qty, 0);
+  const isStaff = !!user && user.role !== "CUSTOMER";
+  const dashboardPath = getDashboardPath(user?.role);
 
   return (
     <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur">
@@ -45,6 +48,11 @@ export function Navbar() {
 
           {user ? (
             <div className="hidden items-center gap-2 md:flex">
+              {isStaff && (
+            <Link href={dashboardPath} className="rounded-xl px-3 py-2 text-sm font-medium text-primary hover:bg-accent">
+              Dashboard
+            </Link>
+              )}
               <Link href="/profile" className="flex items-center gap-2 rounded-xl px-3 py-2 hover:bg-accent">
                 <UserIcon size={18} />
                 <span className="text-sm font-medium">{user.name.split(" ")[0]}</span>
@@ -69,6 +77,9 @@ export function Navbar() {
             <Link href="/products" onClick={() => setOpen(false)}>Belanja</Link>
             <Link href="/orders" onClick={() => setOpen(false)}>Pesanan Saya</Link>
             <Link href="/profile" onClick={() => setOpen(false)}>Profil</Link>
+            {isStaff && (
+  <Link href={dashboardPath} onClick={() => setOpen(false)} className="text-primary">Dashboard</Link>
+)}
             {!user && <Link href="/login" onClick={() => setOpen(false)} className="text-primary">Masuk</Link>}
           </nav>
         </div>

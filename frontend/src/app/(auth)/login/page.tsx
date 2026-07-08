@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { getDashboardPath } from "@/lib/utils";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -20,8 +21,8 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
-      router.push("/");
+      const loggedInUser = await login(email, password);
+      router.push(getDashboardPath(loggedInUser.role));
     } catch (err: any) {
       setError(err.message);
     } finally {
