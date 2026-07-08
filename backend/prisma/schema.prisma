@@ -63,6 +63,13 @@ enum CashflowType {
   OUT
 }
 
+enum PurchaseOrderStatus {
+  DRAFT      // masih disusun, belum dikirim ke supplier
+  ORDERED    // sudah dipesan ke supplier, menunggu barang datang
+  RECEIVED   // barang sudah diterima, stok & cashflow sudah tercatat
+  CANCELLED  // dibatalkan
+}
+
 // ================== USER & AUTH ==================
 
 model User {
@@ -81,6 +88,9 @@ model User {
   ordersAsCourier  Order[]  @relation("CourierOrders")
   inventoryMoves   InventoryHistory[]
   cashflowEntries  Cashflow[]
+  wishlist         Wishlist[]
+  reviews          Review[]
+  purchaseOrders   PurchaseOrder[]
 
   @@map("users")
 }
@@ -144,8 +154,41 @@ model Product {
   category   Category    @relation(fields: [categoryId], references: [id])
   inventory  Inventory[]
   orderItems OrderItem[]
+  wishlist   Wishlist[]
+  reviews    Review[]
+  purchaseOrderItems PurchaseOrderItem[]
 
   @@map("products")
+}
+
+// ================== WISHLIST & REVIEW ==================
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId]) // 1 produk cuma bisa di-wishlist sekali oleh user yang sama
+  @@map("wishlists")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  rating    Int      // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId]) // 1 user cuma bisa review 1 produk sekali (bisa di-edit, bukan dobel)
+  @@map("reviews")
 }
 
 // ================== FULFILLMENT POINT & INVENTORY ==================
@@ -165,6 +208,7 @@ model FulfillmentPoint {
   inventory Inventory[]
   orders    Order[]
   cashflow  Cashflow[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("fulfillment_points")
 }
@@ -298,4 +342,55 @@ model Cashflow {
   createdBy User?             @relation(fields: [createdById], references: [id])
 
   @@map("cashflow")
+}
+
+// ================== SUPPLIER & PURCHASE ORDER ==================
+
+model Supplier {
+  id          String   @id @default(cuid())
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  purchaseOrders PurchaseOrder[]
+
+  @@map("suppliers")
+}
+
+model PurchaseOrder {
+  id          String              @id @default(cuid())
+  poNumber    String              @unique
+  supplierId  String
+  pointId     String              // Point tujuan penerimaan barang
+  status      PurchaseOrderStatus @default(ORDERED)
+  totalAmount Int                 @default(0)
+  notes       String?
+  createdById String?
+  createdAt   DateTime            @default(now())
+  receivedAt  DateTime?
+
+  supplier  Supplier            @relation(fields: [supplierId], references: [id])
+  point     FulfillmentPoint    @relation(fields: [pointId], references: [id])
+  createdBy User?               @relation(fields: [createdById], references: [id])
+  items     PurchaseOrderItem[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id        String @id @default(cuid())
+  poId      String
+  productId String
+  qty       Int
+  costPrice Int    // harga beli satuan saat PO dibuat (snapshot)
+  subtotal  Int
+
+  po      PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
 }

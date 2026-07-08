@@ -99,6 +99,42 @@ export interface User {
   role: "SUPER_ADMIN" | "ADMIN" | "KASIR" | "GUDANG" | "KURIR" | "CUSTOMER";
 }
 
+export interface Supplier {
+  id: string;
+  name: string;
+  contactName?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  isActive: boolean;
+}
+
+export type PurchaseOrderStatus = "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED";
+
+export interface PurchaseOrderItem {
+  id: string;
+  productId: string;
+  qty: number;
+  costPrice: number;
+  subtotal: number;
+  product?: Product;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  pointId: string;
+  status: PurchaseOrderStatus;
+  totalAmount: number;
+  notes?: string | null;
+  createdAt: string;
+  receivedAt?: string | null;
+  items: PurchaseOrderItem[];
+  supplier?: Supplier;
+  point?: FulfillmentPoint;
+}
+
 export interface CartItem {
   productId: string;
   name: string;

@@ -9,6 +9,10 @@ import cashflowRoutes from "./cashflow.routes";
 import voucherRoutes from "./voucher.routes";
 import addressRoutes from "./address.routes";
 import uploadRoutes from "./upload.routes";
+import wishlistRoutes from "./wishlist.routes";
+import reviewRoutes from "./review.routes";
+import supplierRoutes from "./supplier.routes";
+import purchaseOrderRoutes from "./purchaseOrder.routes";
 
 const router = Router();
 
@@ -22,5 +26,9 @@ router.use("/cashflow", cashflowRoutes);
 router.use("/vouchers", voucherRoutes);
 router.use("/addresses", addressRoutes);
 router.use("/upload", uploadRoutes);
+router.use("/wishlist", wishlistRoutes);
+router.use("/reviews", reviewRoutes);
+router.use("/suppliers", supplierRoutes);
+router.use("/purchase-orders", purchaseOrderRoutes);
 
 export default router;

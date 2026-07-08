@@ -38,7 +38,20 @@ export async function getProductBySlug(req: Request, res: Response) {
     include: { category: true, inventory: { include: { point: true } } },
   });
   if (!product) return fail(res, "Produk tidak ditemukan", 404);
-  return ok(res, withStockSummary(product));
+
+  // Ringkasan rating (dipakai untuk tampilkan bintang di halaman detail).
+  // Daftar review lengkapnya diambil terpisah lewat GET /api/reviews?productId=.
+  const ratingAgg = await prisma.review.aggregate({
+    where: { productId: product.id },
+    _avg: { rating: true },
+    _count: { rating: true },
+  });
+
+  return ok(res, {
+    ...withStockSummary(product),
+    avgRating: ratingAgg._avg.rating ? Math.round(ratingAgg._avg.rating * 10) / 10 : 0,
+    totalReviews: ratingAgg._count.rating,
+  });
 }
 
 export async function createProduct(req: Request, res: Response) {

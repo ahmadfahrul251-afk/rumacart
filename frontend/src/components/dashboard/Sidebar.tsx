@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
@@ -11,6 +11,8 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
+    { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
   ],
   SUPER_ADMIN: [
@@ -18,12 +20,16 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
+    { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
   ],
   GUDANG: [
     { href: "/dashboard/gudang", label: "Order Masuk", icon: ShoppingBag },
     { href: "/dashboard/gudang", label: "Inventory", icon: Package },
     { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
+    { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
+    { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
   ],
   KASIR: [{ href: "/dashboard/kasir", label: "POS", icon: ShoppingBag }],
   KURIR: [{ href: "/dashboard/kurir", label: "Pengantaran", icon: Truck }],
