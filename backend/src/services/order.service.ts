@@ -1,6 +1,7 @@
 import { prisma } from "../config/db";
 import { selectBestPoint, CartLine } from "./pointSelector.service";
 import { recordCashflow } from "./cashflow.service";
+import { calcVoucherDiscount } from "./voucher.service";
 
 interface CreateOrderInput {
   customerId: string;
@@ -44,23 +45,28 @@ export async function createOrder(input: CreateOrderInput) {
   const pointId = await selectBestPoint(input.items, lat, lon, city);
 
   // 4. Hitung subtotal berdasarkan harga di database (bukan dari client).
+  //    Sekaligus hitung total harga modal (costPrice) supaya bisa dipisahkan
+  //    dari keuntungan nanti, dan dipakai untuk deteksi "jual di bawah modal".
   let subtotal = 0;
+  let costTotal = 0;
   const orderItemsData = input.items.map((line) => {
     const product = productMap.get(line.productId);
     if (!product) throw new Error(`Produk ${line.productId} tidak ditemukan`);
     const price = product.discountPrice ?? product.sellPrice;
     const lineSubtotal = price * line.qty;
     subtotal += lineSubtotal;
+    costTotal += product.costPrice * line.qty;
     return { productId: product.id, qty: line.qty, price, subtotal: lineSubtotal };
   });
 
-  // 5. Voucher (opsional, sederhana: potongan flat).
+  // 5. Voucher (opsional, mendukung potongan flat maupun persen dengan batas maksimal).
   let discount = 0;
   let voucherId: string | undefined;
   if (input.voucherCode) {
     const voucher = await prisma.voucher.findUnique({ where: { code: input.voucherCode } });
-    if (voucher && voucher.isActive && voucher.used < voucher.quota && subtotal >= voucher.minPurchase) {
-      discount = voucher.discountAmount;
+    const notExpired = !voucher?.expiresAt || voucher.expiresAt >= new Date();
+    if (voucher && voucher.isActive && voucher.used < voucher.quota && subtotal >= voucher.minPurchase && notExpired) {
+      discount = calcVoucherDiscount(voucher, subtotal);
       voucherId = voucher.id;
     }
   }
@@ -68,6 +74,10 @@ export async function createOrder(input: CreateOrderInput) {
   const shippingCost = SHIPPING_COST[input.shippingMethod] ?? 0;
   const total = Math.max(subtotal + shippingCost - discount, 0);
   const orderNumber = generateOrderNumber();
+
+  // Kalau harga produk (setelah diskon voucher) sudah tidak menutup harga modal,
+  // tandai order ini supaya Admin sadar cash bisnisnya "tergerus" oleh diskon.
+  const belowCost = subtotal - discount < costTotal;
 
   // 6. Simpan order + kurangi stok di Point terpilih, dalam satu transaction
   //    supaya konsisten (kalau salah satu gagal, semua dibatalkan).
@@ -85,6 +95,8 @@ export async function createOrder(input: CreateOrderInput) {
         shippingCost,
         discount,
         total,
+        costTotal,
+        belowCost,
         notes: input.notes,
         items: { create: orderItemsData },
         payment: { create: { method: input.paymentMethod, amount: total, status: "PENDING" } },
@@ -121,12 +133,17 @@ export async function createOrder(input: CreateOrderInput) {
     timeout: 20000,
   });
 
-  // 7. Catat cashflow masuk dari penjualan ini.
+  // 7. Catat cashflow masuk dari penjualan ini. Uang yang benar-benar masuk tetap
+  //    `total` (akurat untuk hitung saldo kas), tapi kita pecah juga jadi porsi
+  //    "modal kembali" (costTotal) dan "keuntungan bersih" (sisanya, bisa negatif
+  //    kalau diskon voucher sampai menggerus modal) supaya kelihatan di laporan Cashflow.
   await recordCashflow({
     type: "IN",
     category: "Penjualan",
     amount: total,
-    description: `Order ${orderNumber}`,
+    costAmount: costTotal,
+    profitAmount: total - costTotal,
+    description: `Order ${orderNumber}${belowCost ? " (di bawah modal!)" : ""}`,
     pointId,
     refType: "ORDER",
     refId: order.id,

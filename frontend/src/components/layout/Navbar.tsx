@@ -7,6 +7,7 @@ import { ShoppingCart, Search, Menu, X, User as UserIcon } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { getDashboardPath } from "@/lib/utils";
+import { NotificationBell } from "./NotificationBell";
 
 export function Navbar() {
   const { user, logout } = useAuth();
@@ -62,6 +63,8 @@ export function Navbar() {
               </span>
             )}
           </Link>
+
+          {user && <NotificationBell />}
 
           {user ? (
             <div className="hidden items-center gap-2 md:flex">

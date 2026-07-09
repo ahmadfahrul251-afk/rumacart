@@ -35,10 +35,17 @@ export async function cashflowSummary(req: Request, res: Response) {
   const cashIn = entries.filter((e: any) => e.type === "IN").reduce((s: number, e: any) => s + e.amount, 0);
   const cashOut = entries.filter((e: any) => e.type === "OUT").reduce((s: number, e: any) => s + e.amount, 0);
 
+  // Pecahan uang masuk dari penjualan: berapa yang sebenarnya "modal kembali"
+  // vs "keuntungan bersih". Ini murni breakdown pelaporan, tidak mengubah cashIn/cashOut di atas.
+  const totalModal = entries.reduce((s: number, e: any) => s + (e.costAmount || 0), 0);
+  const totalProfit = entries.reduce((s: number, e: any) => s + (e.profitAmount || 0), 0);
+
   return ok(res, {
     cashIn,
     cashOut,
     netCash: cashIn - cashOut,
+    totalModal,
+    totalProfit,
   });
 }
 

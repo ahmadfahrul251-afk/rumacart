@@ -71,6 +71,17 @@ enum PurchaseOrderStatus {
   CANCELLED  // dibatalkan
 }
 
+enum VoucherDiscountType {
+  FLAT     // potongan nominal tetap (Rupiah)
+  PERCENT  // potongan persentase dari subtotal, bisa dibatasi maxDiscount
+}
+
+enum NotificationType {
+  ORDER   // perubahan status pesanan / pembayaran
+  PROMO   // voucher/promo baru
+  SYSTEM  // pengumuman umum
+}
+
 // ================== USER & AUTH ==================
 
 model User {
@@ -92,6 +103,7 @@ model User {
   wishlist         Wishlist[]
   reviews          Review[]
   purchaseOrders   PurchaseOrder[]
+  notifications    Notification[]
 
   @@map("users")
 }
@@ -249,16 +261,18 @@ model InventoryHistory {
 // ================== VOUCHER (sederhana) ==================
 
 model Voucher {
-  id             String   @id @default(cuid())
-  code           String   @unique
+  id             String              @id @default(cuid())
+  code           String              @unique
   description    String?
-  discountAmount Int      // potongan dalam Rupiah
-  minPurchase    Int      @default(0)
-  quota          Int      @default(100)
-  used           Int      @default(0)
-  isActive       Boolean  @default(true)
+  discountType   VoucherDiscountType @default(FLAT)
+  discountAmount Int                 // FLAT: potongan Rupiah. PERCENT: persen (1-100)
+  maxDiscount    Int?                // batas maksimal potongan untuk tipe PERCENT (opsional)
+  minPurchase    Int                 @default(0)
+  quota          Int                 @default(100)
+  used           Int                 @default(0)
+  isActive       Boolean             @default(true)
   expiresAt      DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime            @default(now())
 
   orders Order[]
 
@@ -282,6 +296,8 @@ model Order {
   shippingCost   Int            @default(0)
   discount       Int            @default(0)
   total          Int
+  costTotal      Int            @default(0) // total harga modal (costPrice x qty) untuk order ini
+  belowCost      Boolean        @default(false) // true kalau (subtotal - discount) < costTotal, artinya diskon menggerus modal
   notes          String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -328,16 +344,18 @@ model Payment {
 // ================== CASHFLOW ==================
 
 model Cashflow {
-  id          String       @id @default(cuid())
-  type        CashflowType
-  category    String       // "Penjualan", "Belanja Supplier", "Gaji", dst
-  amount      Int
-  description String?
-  pointId     String?
-  refType     String?      // "ORDER", "EXPENSE", dst
-  refId       String?
-  createdById String?
-  createdAt   DateTime     @default(now())
+  id            String       @id @default(cuid())
+  type          CashflowType
+  category      String       // "Penjualan", "Belanja Supplier", "Gaji", dst
+  amount        Int
+  costAmount    Int?         // untuk entry Penjualan: porsi yang menutup modal (harga dasar produk)
+  profitAmount  Int?         // untuk entry Penjualan: porsi keuntungan bersih (bisa negatif kalau rugi karena diskon)
+  description   String?
+  pointId       String?
+  refType       String?      // "ORDER", "EXPENSE", dst
+  refId         String?
+  createdById   String?
+  createdAt     DateTime     @default(now())
 
   point     FulfillmentPoint? @relation(fields: [pointId], references: [id])
   createdBy User?             @relation(fields: [createdById], references: [id])
@@ -394,4 +412,22 @@ model PurchaseOrderItem {
   product Product       @relation(fields: [productId], references: [id])
 
   @@map("purchase_order_items")
+}
+
+// ================== NOTIFIKASI ==================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  message   String
+  refId     String?          // id order / voucher terkait, untuk link saat diklik
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
 }

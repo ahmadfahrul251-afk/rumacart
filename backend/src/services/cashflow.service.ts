@@ -7,6 +7,8 @@ export async function recordCashflow(params: {
   type: "IN" | "OUT";
   category: string;
   amount: number;
+  costAmount?: number;
+  profitAmount?: number;
   description?: string;
   pointId?: string;
   refType?: string;

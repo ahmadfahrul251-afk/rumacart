@@ -96,11 +96,27 @@ export interface Order {
   shippingCost: number;
   discount: number;
   total: number;
+  costTotal: number;
+  belowCost: boolean;
   createdAt: string;
   items: OrderItem[];
   point?: FulfillmentPoint;
   payment?: Payment;
   customer?: { name: string; phone?: string | null };
+}
+
+export interface Cashflow {
+  id: string;
+  type: "IN" | "OUT";
+  category: string;
+  amount: number;
+  costAmount?: number | null;
+  profitAmount?: number | null;
+  description?: string | null;
+  refType?: string | null;
+  refId?: string | null;
+  createdAt: string;
+  point?: FulfillmentPoint | null;
 }
 
 export interface User {
@@ -145,6 +161,36 @@ export interface PurchaseOrder {
   items: PurchaseOrderItem[];
   supplier?: Supplier;
   point?: FulfillmentPoint;
+}
+
+export type VoucherDiscountType = "FLAT" | "PERCENT";
+
+export interface Voucher {
+  id: string;
+  code: string;
+  description?: string | null;
+  discountType: VoucherDiscountType;
+  discountAmount: number;
+  maxDiscount?: number | null;
+  minPurchase: number;
+  quota: number;
+  used: number;
+  isActive: boolean;
+  expiresAt?: string | null;
+  createdAt: string;
+  discount?: number; // hanya ada di response /vouchers/validate
+}
+
+export type NotificationType = "ORDER" | "PROMO" | "SYSTEM";
+
+export interface Notification {
+  id: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  refId?: string | null;
+  isRead: boolean;
+  createdAt: string;
 }
 
 export interface CartItem {

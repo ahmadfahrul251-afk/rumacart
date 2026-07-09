@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { api } from "@/lib/api";
 import { Product } from "@/types";
+import { formatRupiah } from "@/lib/utils";
 
 function EditProductContent() {
   const { slug } = useParams<{ slug: string }>();
@@ -54,6 +55,7 @@ function EditProductContent() {
       await api.put(`/products/${product.id}`, {
         name: product.name,
         description: product.description,
+        costPrice: product.costPrice,
         sellPrice: product.sellPrice,
         discountPrice: product.discountPrice || null,
         images: product.images,
@@ -122,6 +124,15 @@ function EditProductContent() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
+              <label className="mb-1 block text-sm font-medium">Harga Modal (Dasar)</label>
+              <Input
+                type="number"
+                value={product.costPrice}
+                onChange={(e) => setProduct({ ...product, costPrice: Number(e.target.value) })}
+              />
+              <p className="mt-1 text-xs text-ink/40">Tidak terlihat customer. Dipakai untuk hitung untung & jaga cash bisnis.</p>
+            </div>
+            <div>
               <label className="mb-1 block text-sm font-medium">Harga Jual</label>
               <Input
                 type="number"
@@ -140,6 +151,19 @@ function EditProductContent() {
               />
             </div>
           </div>
+
+          {(() => {
+            const effectivePrice = product.discountPrice || product.sellPrice;
+            const margin = effectivePrice - product.costPrice;
+            if (!product.costPrice) return null;
+            return (
+              <p className={`text-sm font-medium ${margin < 0 ? "text-red-600" : "text-primary"}`}>
+                {margin < 0
+                  ? `⚠️ Harga jual saat ini di bawah modal (rugi ${formatRupiah(Math.abs(margin))} per item)`
+                  : `Estimasi untung per item: ${formatRupiah(margin)}`}
+              </p>
+            );
+          })()}
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {success && <p className="text-sm text-primary">{success}</p>}

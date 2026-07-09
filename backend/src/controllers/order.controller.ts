@@ -1,7 +1,18 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/db";
 import { createOrder } from "../services/order.service";
+import { createNotification } from "../services/notification.service";
 import { ok, fail } from "../utils/response";
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "menunggu diproses",
+  PROCESSED: "sedang diproses",
+  PREPARED: "sedang disiapkan",
+  PICKED_UP: "sudah diambil gudang, siap dikirim",
+  SHIPPED: "sedang dalam pengiriman",
+  COMPLETED: "selesai",
+  CANCELLED: "dibatalkan",
+};
 
 // POST /api/orders — checkout
 export async function checkout(req: Request, res: Response) {
@@ -79,6 +90,15 @@ export async function updateStatus(req: Request, res: Response) {
     });
   }
 
+  // Kabari customer bahwa status pesanannya berubah.
+  await createNotification({
+    userId: order.customerId,
+    title: `Pesanan ${order.orderNumber}`,
+    message: `Pesananmu sekarang ${STATUS_LABEL[status] || status}.`,
+    type: "ORDER",
+    refId: order.id,
+  });
+
   return ok(res, order, "Status order diperbarui");
 }
 
@@ -126,6 +146,15 @@ export async function verifyPayment(req: Request, res: Response) {
     where: { orderId: order.id },
     data: { status: "PAID", paidAt: new Date() },
   });
+
+  await createNotification({
+    userId: order.customerId,
+    title: `Pembayaran ${order.orderNumber} Terverifikasi`,
+    message: "Pembayaranmu sudah kami verifikasi dan pesanan akan segera diproses. Terima kasih!",
+    type: "ORDER",
+    refId: order.id,
+  });
+
   return ok(res, payment, "Pembayaran diverifikasi & ditandai lunas");
 }
 

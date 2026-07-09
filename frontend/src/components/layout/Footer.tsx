@@ -18,7 +18,7 @@ export function Footer() {
           <p className="mb-3 font-semibold">Belanja</p>
           <ul className="space-y-2 text-sm text-ink/60">
             <li><Link href="/products">Semua Produk</Link></li>
-            <li><Link href="/products">Promo</Link></li>
+            <li><Link href="/promo">Promo</Link></li>
             <li><Link href="/products">Kategori</Link></li>
           </ul>
         </div>

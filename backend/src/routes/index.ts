@@ -13,6 +13,7 @@ import wishlistRoutes from "./wishlist.routes";
 import reviewRoutes from "./review.routes";
 import supplierRoutes from "./supplier.routes";
 import purchaseOrderRoutes from "./purchaseOrder.routes";
+import notificationRoutes from "./notification.routes";
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use("/wishlist", wishlistRoutes);
 router.use("/reviews", reviewRoutes);
 router.use("/suppliers", supplierRoutes);
 router.use("/purchase-orders", purchaseOrderRoutes);
+router.use("/notifications", notificationRoutes);
 
 export default router;

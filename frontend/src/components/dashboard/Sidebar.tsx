@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
@@ -14,7 +14,8 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
-    { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
+    { href: "/dashboard/admin/vouchers", label: "Voucher & Promo", icon: Ticket },
+    { href: "/dashboard/admin/cashflow", label: "Cashflow", icon: Wallet },
   ],
   SUPER_ADMIN: [
     { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
@@ -24,7 +25,8 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
-    { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
+    { href: "/dashboard/admin/vouchers", label: "Voucher & Promo", icon: Ticket },
+    { href: "/dashboard/admin/cashflow", label: "Cashflow", icon: Wallet },
   ],
   GUDANG: [
     { href: "/dashboard/gudang", label: "Order Masuk", icon: ShoppingBag },

@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { api } from "@/lib/api";
-import { Address, Order } from "@/types";
+import { Address, Order, Voucher } from "@/types";
 import { formatRupiah } from "@/lib/utils";
+import { Tag, X } from "lucide-react";
 
 const SHIPPING_OPTIONS = [
   { value: "PICKUP", label: "Pickup di Point", cost: 0 },
@@ -37,6 +38,9 @@ export default function CheckoutPage() {
   const [shippingMethod, setShippingMethod] = useState("PICKUP");
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [voucherCode, setVoucherCode] = useState("");
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
+  const [voucherChecking, setVoucherChecking] = useState(false);
+  const [voucherError, setVoucherError] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -56,7 +60,29 @@ export default function CheckoutPage() {
   }, [user]);
 
   const shippingCost = SHIPPING_OPTIONS.find((s) => s.value === shippingMethod)?.cost ?? 0;
-  const total = subtotal + shippingCost;
+  const discount = appliedVoucher?.discount ?? 0;
+  const total = Math.max(subtotal + shippingCost - discount, 0);
+
+  async function applyVoucher() {
+    if (!voucherCode.trim()) return;
+    setVoucherChecking(true);
+    setVoucherError("");
+    try {
+      const result = await api.post<Voucher>("/vouchers/validate", { code: voucherCode.trim().toUpperCase(), subtotal });
+      setAppliedVoucher(result);
+    } catch (err: any) {
+      setAppliedVoucher(null);
+      setVoucherError(err.message);
+    } finally {
+      setVoucherChecking(false);
+    }
+  }
+
+  function removeVoucher() {
+    setAppliedVoucher(null);
+    setVoucherCode("");
+    setVoucherError("");
+  }
 
   async function handleCheckout() {
     setError("");
@@ -73,7 +99,7 @@ export default function CheckoutPage() {
         items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
         shippingMethod,
         paymentMethod,
-        voucherCode: voucherCode || undefined,
+        voucherCode: appliedVoucher ? appliedVoucher.code : undefined,
         notes,
       });
 
@@ -164,7 +190,40 @@ export default function CheckoutPage() {
 
             <section className="card space-y-3">
               <p className="font-semibold">Voucher & Catatan</p>
-              <Input placeholder="Kode voucher (opsional)" value={voucherCode} onChange={(e) => setVoucherCode(e.target.value)} />
+
+              {appliedVoucher ? (
+                <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary-light px-4 py-2.5">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Tag size={15} className="text-primary" />
+                    <span className="font-mono font-semibold">{appliedVoucher.code}</span>
+                    <span className="text-ink/60">— potongan {formatRupiah(appliedVoucher.discount ?? 0)}</span>
+                  </div>
+                  <button type="button" onClick={removeVoucher} className="rounded-lg p-1 hover:bg-white" aria-label="Hapus voucher">
+                    <X size={15} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Kode voucher (opsional)"
+                    value={voucherCode}
+                    onChange={(e) => {
+                      setVoucherCode(e.target.value);
+                      setVoucherError("");
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={applyVoucher}
+                    disabled={voucherChecking || !voucherCode.trim()}
+                    className="shrink-0 rounded-xl border border-black/10 px-4 py-2.5 text-sm font-medium hover:bg-accent disabled:opacity-50"
+                  >
+                    {voucherChecking ? "Cek..." : "Terapkan"}
+                  </button>
+                </div>
+              )}
+              {voucherError && <p className="text-sm text-red-600">{voucherError}</p>}
+
               <textarea
                 placeholder="Catatan untuk kurir (opsional)"
                 value={notes}
@@ -186,6 +245,9 @@ export default function CheckoutPage() {
             <hr className="border-black/5" />
             <div className="flex justify-between text-sm"><span>Subtotal</span><span>{formatRupiah(subtotal)}</span></div>
             <div className="flex justify-between text-sm"><span>Ongkir</span><span>{formatRupiah(shippingCost)}</span></div>
+            {discount > 0 && (
+              <div className="flex justify-between text-sm text-primary"><span>Diskon Voucher</span><span>-{formatRupiah(discount)}</span></div>
+            )}
             <hr className="border-black/5" />
             <div className="flex justify-between font-semibold"><span>Total</span><span>{formatRupiah(total)}</span></div>
             {error && <p className="text-sm text-red-600">{error}</p>}
