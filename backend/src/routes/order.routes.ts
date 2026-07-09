@@ -5,6 +5,7 @@ import {
   listOrders,
   getOrder,
   updateStatus,
+  payOrder,
   courierOrders,
 } from "../controllers/order.controller";
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
@@ -18,5 +19,6 @@ router.get("/courier/assigned", requireAuth, requireRole("KURIR"), courierOrders
 router.get("/", requireAuth, requireRole(...staffRoles), listOrders);
 router.get("/:id", requireAuth, getOrder);
 router.patch("/:id/status", requireAuth, requireRole(...staffRoles, "KURIR"), updateStatus);
+router.patch("/:id/pay", requireAuth, payOrder);
 
 export default router;

@@ -76,6 +76,16 @@ export interface OrderItem {
   product?: Product;
 }
 
+export type PaymentStatus = "PENDING" | "PAID" | "FAILED";
+
+export interface Payment {
+  id: string;
+  method: string;
+  amount: number;
+  status: PaymentStatus;
+  paidAt?: string | null;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -89,6 +99,7 @@ export interface Order {
   createdAt: string;
   items: OrderItem[];
   point?: FulfillmentPoint;
+  payment?: Payment;
 }
 
 export interface User {

@@ -78,7 +78,7 @@ export default function CheckoutPage() {
       });
 
       clearCart();
-      router.push(`/orders?highlight=${order.id}`);
+      router.push(paymentMethod === "COD" ? `/orders?highlight=${order.id}` : `/orders/${order.id}/payment`);
     } catch (err: any) {
       setError(err.message);
     } finally {

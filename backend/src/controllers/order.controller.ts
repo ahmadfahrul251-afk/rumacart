@@ -68,8 +68,38 @@ export async function updateStatus(req: Request, res: Response) {
   const order = await prisma.order.update({
     where: { id: req.params.id },
     data: { status, ...(courierId ? { courierId } : {}) },
+    include: { payment: true },
   });
+
+  // COD dianggap lunas begitu barang sudah diterima customer (dibayar tunai ke kurir).
+  if (status === "COMPLETED" && order.paymentMethod === "COD" && order.payment && order.payment.status !== "PAID") {
+    await prisma.payment.update({
+      where: { orderId: order.id },
+      data: { status: "PAID", paidAt: new Date() },
+    });
+  }
+
   return ok(res, order, "Status order diperbarui");
+}
+
+// PATCH /api/orders/:id/pay — customer konfirmasi pembayaran (dummy, untuk Transfer/E-Wallet).
+// Ini simulasi: di dunia nyata biasanya lewat webhook payment gateway, bukan klik customer langsung.
+export async function payOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: { payment: true },
+  });
+  if (!order) return fail(res, "Order tidak ditemukan", 404);
+  if (order.customerId !== req.user!.userId) return fail(res, "Kamu tidak punya akses ke order ini", 403);
+  if (!order.payment) return fail(res, "Data pembayaran tidak ditemukan", 404);
+  if (order.payment.status === "PAID") return fail(res, "Order ini sudah dibayar", 400);
+  if (order.status === "CANCELLED") return fail(res, "Order ini sudah dibatalkan", 400);
+
+  const payment = await prisma.payment.update({
+    where: { orderId: order.id },
+    data: { status: "PAID", paidAt: new Date() },
+  });
+  return ok(res, payment, "Pembayaran dikonfirmasi");
 }
 
 // GET /api/orders/courier/assigned — order yang sudah diambil kurir ini (SHIPPED),

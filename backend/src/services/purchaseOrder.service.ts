@@ -75,6 +75,11 @@ export async function receivePurchaseOrder(poId: string, userId: string) {
       where: { id: po.id },
       data: { status: "RECEIVED", receivedAt: new Date() },
     });
+  }, {
+    // Sama seperti checkout: naikkan batas waktu transaksi supaya tidak gagal
+    // saat database gratis (Neon) sedang lambat/baru "bangun".
+    maxWait: 10000,
+    timeout: 20000,
   });
 
   await recordCashflow({

@@ -113,6 +113,12 @@ export async function createOrder(input: CreateOrderInput) {
     }
 
     return created;
+  }, {
+    // Default Prisma cuma kasih 5 detik untuk 1 transaksi. Database gratis (Neon)
+    // kadang butuh waktu lebih lama untuk "bangun"/merespons, jadi kita naikkan
+    // batas waktunya supaya checkout tidak gagal di percobaan pertama.
+    maxWait: 10000,
+    timeout: 20000,
   });
 
   // 7. Catat cashflow masuk dari penjualan ini.

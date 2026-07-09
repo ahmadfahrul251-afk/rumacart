@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Badge } from "@/components/ui/Badge";
@@ -39,26 +40,46 @@ export default function OrdersPage() {
         )}
 
         <div className="space-y-3">
-          {orders?.map((o) => (
-            <div key={o.id} className="card">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="font-semibold">{o.orderNumber}</p>
-                <Badge tone={o.status}>{STATUS_LABEL[o.status] || o.status}</Badge>
+          {orders?.map((o) => {
+            const needsPayment = o.paymentMethod !== "COD" && o.payment?.status === "PENDING" && o.status !== "CANCELLED";
+            const isPaid = o.payment?.status === "PAID";
+            return (
+              <div key={o.id} className="card">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold">{o.orderNumber}</p>
+                  <div className="flex items-center gap-2">
+                    {o.paymentMethod !== "COD" && (
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                          isPaid ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                        }`}
+                      >
+                        {isPaid ? "Lunas" : "Menunggu Pembayaran"}
+                      </span>
+                    )}
+                    <Badge tone={o.status}>{STATUS_LABEL[o.status] || o.status}</Badge>
+                  </div>
+                </div>
+                <p className="text-sm text-ink/60">{new Date(o.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}</p>
+                <div className="mt-2 space-y-1">
+                  {o.items.map((it) => (
+                    <p key={it.id} className="text-sm text-ink/70">
+                      {it.product?.name || "Produk"} x{it.qty}
+                    </p>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-black/5 pt-3">
+                  <span className="text-sm text-ink/60">Total</span>
+                  <span className="font-semibold text-primary">{formatRupiah(o.total)}</span>
+                </div>
+                {needsPayment && (
+                  <Link href={`/orders/${o.id}/payment`} className="btn-primary mt-3 w-full !py-2 text-sm">
+                    Lanjutkan Pembayaran
+                  </Link>
+                )}
               </div>
-              <p className="text-sm text-ink/60">{new Date(o.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}</p>
-              <div className="mt-2 space-y-1">
-                {o.items.map((it) => (
-                  <p key={it.id} className="text-sm text-ink/70">
-                    {it.product?.name || "Produk"} x{it.qty}
-                  </p>
-                ))}
-              </div>
-              <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
-                <span className="text-sm text-ink/60">Total</span>
-                <span className="font-semibold text-primary">{formatRupiah(o.total)}</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </main>
       <Footer />
