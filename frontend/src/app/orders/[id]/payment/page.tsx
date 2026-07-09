@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { CheckCircle2, Copy, QrCode, Wallet } from "lucide-react";
+import { CheckCircle2, Clock, Copy, QrCode, Wallet } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -12,8 +12,14 @@ import { api } from "@/lib/api";
 import { Order } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
-// Rekening/QRIS dummy untuk simulasi — tidak ada payment gateway sungguhan.
-const BANK_ACCOUNT = { bank: "Bank RumaCart", number: "8801 2026 0709", holder: "PT RumaCart Indonesia Jaya" };
+// Rekening transfer RumaCart — pembayaran masuk ke sini, diverifikasi manual
+// oleh Admin/Kasir sebelum pesanan diproses.
+const BANK_ACCOUNT = { bank: "Bank Mandiri", number: "174-00-0241584-2", holder: "AHMAD FAHRUL" };
+
+// Selama menunggu verifikasi, halaman ini cek ulang statusnya tiap beberapa detik
+// supaya otomatis berubah jadi "Lunas" begitu Admin/Kasir sudah verifikasi — tanpa
+// customer perlu refresh manual.
+const POLL_INTERVAL_MS = 5000;
 
 export default function PaymentPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +29,7 @@ export default function PaymentPage() {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   function load() {
     api
@@ -36,6 +43,15 @@ export default function PaymentPage() {
   }, [authLoading, user, id, router]);
 
   useEffect(load, [id]);
+
+  useEffect(() => {
+    if (order?.payment?.status === "AWAITING_VERIFICATION") {
+      pollRef.current = setInterval(load, POLL_INTERVAL_MS);
+      return () => {
+        if (pollRef.current) clearInterval(pollRef.current);
+      };
+    }
+  }, [order?.payment?.status, id]);
 
   async function handleConfirm() {
     setConfirming(true);
@@ -51,7 +67,7 @@ export default function PaymentPage() {
   }
 
   function copyAccount() {
-    navigator.clipboard.writeText(BANK_ACCOUNT.number.replace(/\s/g, ""));
+    navigator.clipboard.writeText(BANK_ACCOUNT.number.replace(/\D/g, ""));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   }
@@ -69,6 +85,7 @@ export default function PaymentPage() {
   }
 
   const isPaid = order.payment?.status === "PAID";
+  const isAwaitingVerification = order.payment?.status === "AWAITING_VERIFICATION";
   const isCod = order.paymentMethod === "COD";
 
   return (
@@ -82,6 +99,16 @@ export default function PaymentPage() {
               <h1 className="text-xl font-bold">Pembayaran Berhasil</h1>
               <p className="mt-1 text-sm text-ink/60">
                 Terima kasih! Pesanan {order.orderNumber} sudah lunas dan akan segera diproses.
+              </p>
+            </>
+          ) : isAwaitingVerification ? (
+            <>
+              <Clock size={44} className="mx-auto mb-3 text-yellow-500" />
+              <h1 className="text-xl font-bold">Menunggu Verifikasi</h1>
+              <p className="mt-1 text-sm text-ink/60">
+                Terima kasih sudah transfer untuk pesanan {order.orderNumber}. Tim kami sedang memeriksa mutasi rekening —
+                biasanya selesai dalam beberapa menit hingga beberapa jam. Halaman ini akan otomatis
+                memperbarui begitu pembayaranmu terverifikasi.
               </p>
             </>
           ) : isCod ? (
@@ -128,9 +155,15 @@ export default function PaymentPage() {
               <Button onClick={handleConfirm} disabled={confirming} className="mt-5 w-full">
                 {confirming ? "Memproses..." : order.paymentMethod === "TRANSFER" ? "Saya Sudah Transfer" : "Bayar Sekarang"}
               </Button>
-              <p className="mt-2 text-xs text-ink/40">
-                *Simulasi pembayaran untuk keperluan demo — tidak ada transaksi uang sungguhan.
-              </p>
+              {order.paymentMethod === "TRANSFER" ? (
+                <p className="mt-2 text-xs text-ink/40">
+                  Pastikan nominal transfer sesuai persis dengan total di atas supaya verifikasi lebih cepat.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-ink/40">
+                  *Simulasi pembayaran untuk keperluan demo — tidak ada transaksi uang sungguhan.
+                </p>
+              )}
             </>
           )}
 

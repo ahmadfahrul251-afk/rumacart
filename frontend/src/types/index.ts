@@ -76,7 +76,7 @@ export interface OrderItem {
   product?: Product;
 }
 
-export type PaymentStatus = "PENDING" | "PAID" | "FAILED";
+export type PaymentStatus = "PENDING" | "AWAITING_VERIFICATION" | "PAID" | "FAILED";
 
 export interface Payment {
   id: string;
@@ -100,6 +100,7 @@ export interface Order {
   items: OrderItem[];
   point?: FulfillmentPoint;
   payment?: Payment;
+  customer?: { name: string; phone?: string | null };
 }
 
 export interface User {

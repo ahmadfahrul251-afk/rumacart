@@ -82,8 +82,11 @@ export async function updateStatus(req: Request, res: Response) {
   return ok(res, order, "Status order diperbarui");
 }
 
-// PATCH /api/orders/:id/pay — customer konfirmasi pembayaran (dummy, untuk Transfer/E-Wallet).
-// Ini simulasi: di dunia nyata biasanya lewat webhook payment gateway, bukan klik customer langsung.
+// PATCH /api/orders/:id/pay — customer konfirmasi pembayaran.
+// - TRANSFER: rekening yang ditampilkan adalah rekening asli, jadi klik ini TIDAK langsung
+//   menandai lunas — statusnya jadi AWAITING_VERIFICATION, menunggu Admin/Kasir cek mutasi
+//   rekening secara manual lalu konfirmasi lewat verifyPayment().
+// - EWALLET: masih simulasi penuh (belum ada payment gateway), jadi langsung PAID.
 export async function payOrder(req: Request, res: Response) {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
@@ -93,13 +96,47 @@ export async function payOrder(req: Request, res: Response) {
   if (order.customerId !== req.user!.userId) return fail(res, "Kamu tidak punya akses ke order ini", 403);
   if (!order.payment) return fail(res, "Data pembayaran tidak ditemukan", 404);
   if (order.payment.status === "PAID") return fail(res, "Order ini sudah dibayar", 400);
+  if (order.payment.status === "AWAITING_VERIFICATION") {
+    return fail(res, "Konfirmasi transfer kamu sudah kami terima, sedang menunggu verifikasi", 400);
+  }
   if (order.status === "CANCELLED") return fail(res, "Order ini sudah dibatalkan", 400);
+
+  const isTransfer = order.paymentMethod === "TRANSFER";
+  const payment = await prisma.payment.update({
+    where: { orderId: order.id },
+    data: isTransfer
+      ? { status: "AWAITING_VERIFICATION" }
+      : { status: "PAID", paidAt: new Date() },
+  });
+  return ok(res, payment, isTransfer ? "Konfirmasi transfer diterima, menunggu verifikasi" : "Pembayaran dikonfirmasi");
+}
+
+// PATCH /api/orders/:id/verify-payment — Admin/Kasir menandai pembayaran transfer
+// sebagai lunas SETELAH mengecek manual bahwa uang sudah benar-benar masuk ke rekening.
+export async function verifyPayment(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: { payment: true },
+  });
+  if (!order) return fail(res, "Order tidak ditemukan", 404);
+  if (!order.payment) return fail(res, "Data pembayaran tidak ditemukan", 404);
+  if (order.payment.status === "PAID") return fail(res, "Pembayaran ini sudah diverifikasi sebelumnya", 400);
 
   const payment = await prisma.payment.update({
     where: { orderId: order.id },
     data: { status: "PAID", paidAt: new Date() },
   });
-  return ok(res, payment, "Pembayaran dikonfirmasi");
+  return ok(res, payment, "Pembayaran diverifikasi & ditandai lunas");
+}
+
+// GET /api/orders/awaiting-verification — daftar order yang menunggu verifikasi manual (Admin/Kasir)
+export async function listAwaitingVerification(_req: Request, res: Response) {
+  const orders = await prisma.order.findMany({
+    where: { payment: { status: "AWAITING_VERIFICATION" } },
+    include: { items: { include: { product: true } }, point: true, customer: true, payment: true },
+    orderBy: { createdAt: "asc" },
+  });
+  return ok(res, orders);
 }
 
 // GET /api/orders/courier/assigned — order yang sudah diambil kurir ini (SHIPPED),

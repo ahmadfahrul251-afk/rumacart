@@ -45,6 +45,7 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
+  AWAITING_VERIFICATION // customer klaim sudah transfer, menunggu dicek manual oleh Admin/Kasir
   PAID
   FAILED
 }

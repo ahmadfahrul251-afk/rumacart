@@ -43,19 +43,20 @@ export default function OrdersPage() {
           {orders?.map((o) => {
             const needsPayment = o.paymentMethod !== "COD" && o.payment?.status === "PENDING" && o.status !== "CANCELLED";
             const isPaid = o.payment?.status === "PAID";
+            const isAwaitingVerification = o.payment?.status === "AWAITING_VERIFICATION";
+            const paymentLabel = isPaid ? "Lunas" : isAwaitingVerification ? "Menunggu Verifikasi" : "Menunggu Pembayaran";
+            const paymentTone = isPaid
+              ? "bg-green-100 text-green-700"
+              : isAwaitingVerification
+                ? "bg-blue-100 text-blue-700"
+                : "bg-yellow-100 text-yellow-700";
             return (
               <div key={o.id} className="card">
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold">{o.orderNumber}</p>
                   <div className="flex items-center gap-2">
                     {o.paymentMethod !== "COD" && (
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                          isPaid ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
-                        }`}
-                      >
-                        {isPaid ? "Lunas" : "Menunggu Pembayaran"}
-                      </span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${paymentTone}`}>{paymentLabel}</span>
                     )}
                     <Badge tone={o.status}>{STATUS_LABEL[o.status] || o.status}</Badge>
                   </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
@@ -13,6 +13,7 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
+    { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
     { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
   ],
   SUPER_ADMIN: [
@@ -22,6 +23,7 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
+    { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
     { href: "/dashboard/admin", label: "Cashflow", icon: Wallet },
   ],
   GUDANG: [
@@ -31,7 +33,10 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
   ],
-  KASIR: [{ href: "/dashboard/kasir", label: "POS", icon: ShoppingBag }],
+  KASIR: [
+    { href: "/dashboard/kasir", label: "POS", icon: ShoppingBag },
+    { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
+  ],
   KURIR: [{ href: "/dashboard/kurir", label: "Pengantaran", icon: Truck }],
 };
 
