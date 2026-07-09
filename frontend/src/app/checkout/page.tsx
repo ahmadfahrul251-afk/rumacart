@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -31,7 +32,7 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressId, setAddressId] = useState("");
   const [showNewAddress, setShowNewAddress] = useState(false);
-  const [newAddress, setNewAddress] = useState({ recipientName: "", phone: "", fullAddress: "", city: "", province: "" });
+  const [newAddress, setNewAddress] = useState({ recipientName: "", phone: "", fullAddress: "", city: "" });
 
   const [shippingMethod, setShippingMethod] = useState("PICKUP");
   const [paymentMethod, setPaymentMethod] = useState("COD");
@@ -90,7 +91,8 @@ export default function CheckoutPage() {
       <>
         <Navbar />
         <main className="mx-auto max-w-3xl px-4 py-16 text-center sm:px-6">
-          <p className="text-ink/60">Keranjangmu kosong, tidak ada yang bisa di-checkout.</p>
+          <p className="mb-4 text-ink/60">Keranjangmu kosong, tidak ada yang bisa di-checkout.</p>
+          <Link href="/products" className="btn-primary !inline-flex !py-2.5 !px-5 text-sm">Mulai Belanja</Link>
         </main>
         <Footer />
       </>
@@ -103,7 +105,7 @@ export default function CheckoutPage() {
       <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
         <h1 className="mb-6 text-2xl font-bold">Checkout</h1>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid items-start gap-6 md:grid-cols-3">
           <div className="space-y-6 md:col-span-2">
             <section className="card">
               <p className="mb-3 font-semibold">Alamat Pengiriman</p>
@@ -128,7 +130,6 @@ export default function CheckoutPage() {
                   <Input placeholder="No. HP" value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })} />
                   <Input placeholder="Alamat Lengkap" value={newAddress.fullAddress} onChange={(e) => setNewAddress({ ...newAddress, fullAddress: e.target.value })} />
                   <Input placeholder="Kota" value={newAddress.city} onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} />
-                  <Input placeholder="Provinsi" value={newAddress.province} onChange={(e) => setNewAddress({ ...newAddress, province: e.target.value })} />
                   {addresses.length > 0 && (
                     <button onClick={() => setShowNewAddress(false)} className="text-sm text-ink/60">Batal, pilih alamat tersimpan</button>
                   )}
@@ -174,7 +175,7 @@ export default function CheckoutPage() {
             </section>
           </div>
 
-          <div className="card h-fit space-y-3">
+          <div className="card sticky top-20 h-fit space-y-3">
             <p className="font-semibold">Ringkasan Pesanan</p>
             {items.map((i) => (
               <div key={i.productId} className="flex justify-between text-sm">

@@ -5,8 +5,15 @@ import { ok, fail } from "../utils/response";
 // GET /api/products?search=&category=&page=&limit=
 // Query publik untuk katalog customer — hanya produk aktif, plus total stok
 // gabungan dari semua Point supaya bisa ditampilkan "Stok tersedia".
+const SORT_OPTIONS: Record<string, any> = {
+  newest: { createdAt: "desc" },
+  price_asc: { sellPrice: "asc" },
+  price_desc: { sellPrice: "desc" },
+  name_asc: { name: "asc" },
+};
+
 export async function listProducts(req: Request, res: Response) {
-  const { search = "", category, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { search = "", category, page = "1", limit = "20", sort = "newest" } = req.query as Record<string, string>;
   const take = Math.min(Number(limit) || 20, 100);
   const skip = (Number(page) - 1) * take;
 
@@ -22,7 +29,7 @@ export async function listProducts(req: Request, res: Response) {
       include: { category: true, inventory: true },
       skip,
       take,
-      orderBy: { createdAt: "desc" },
+      orderBy: SORT_OPTIONS[sort] || SORT_OPTIONS.newest,
     }),
     prisma.product.count({ where }),
   ]);

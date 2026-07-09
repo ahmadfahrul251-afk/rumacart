@@ -21,16 +21,26 @@ export default function ProductsPage() {
   );
 }
 
+const SORT_OPTIONS = [
+  { value: "newest", label: "Terbaru" },
+  { value: "price_asc", label: "Harga: Termurah" },
+  { value: "price_desc", label: "Harga: Termahal" },
+  { value: "name_asc", label: "Nama: A-Z" },
+];
+
 function ProductsPageInner() {
   const searchParams = useSearchParams();
   const initialCategory = searchParams.get("category") || "";
+  const initialSearch = searchParams.get("search") || "";
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [category, setCategory] = useState(initialCategory);
+  const [sort, setSort] = useState("newest");
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[] | null>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     api.get<Category[]>("/categories").then(setCategories).catch(() => setCategories([]));
@@ -38,51 +48,69 @@ function ProductsPageInner() {
 
   useEffect(() => {
     setProducts(null);
-    const params = new URLSearchParams({ page: String(page), limit: "12" });
+    const params = new URLSearchParams({ page: String(page), limit: "12", sort });
     if (search) params.set("search", search);
     if (category) params.set("category", category);
     api
-      .get<{ items: Product[]; totalPages: number }>(`/products?${params.toString()}`)
+      .get<{ items: Product[]; totalPages: number; total: number }>(`/products?${params.toString()}`)
       .then((res) => {
         setProducts(res.items);
         setTotalPages(res.totalPages);
+        setTotal(res.total);
       })
       .catch(() => setProducts([]));
-  }, [search, category, page]);
+  }, [search, category, sort, page]);
+
+  const activeCategory = categories.find((c) => c.slug === category);
 
   return (
     <>
       <Navbar />
       <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <h1 className="mb-6 text-2xl font-bold">Katalog Produk</h1>
+        <h1 className="mb-1 text-2xl font-bold">
+          {activeCategory ? activeCategory.name : search ? `Hasil untuk "${search}"` : "Katalog Produk"}
+        </h1>
+        {products && <p className="mb-6 text-sm text-ink/50">{total} produk ditemukan</p>}
 
-        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center">
-          <Input
-            placeholder="Cari produk..."
-            value={search}
-            onChange={(e) => {
-              setPage(1);
-              setSearch(e.target.value);
-            }}
-            className="md:max-w-xs"
-          />
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => { setCategory(""); setPage(1); }}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium ${!category ? "bg-primary text-white" : "bg-accent"}`}
-            >
-              Semua
-            </button>
-            {categories.map((c) => (
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <Input
+              placeholder="Cari produk..."
+              value={search}
+              onChange={(e) => {
+                setPage(1);
+                setSearch(e.target.value);
+              }}
+              className="md:max-w-xs"
+            />
+            <div className="flex flex-wrap gap-2">
               <button
-                key={c.id}
-                onClick={() => { setCategory(c.slug); setPage(1); }}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium ${category === c.slug ? "bg-primary text-white" : "bg-accent"}`}
+                onClick={() => { setCategory(""); setPage(1); }}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium ${!category ? "bg-primary text-white" : "bg-accent"}`}
               >
-                {c.name}
+                Semua
               </button>
-            ))}
+              {categories.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => { setCategory(c.slug); setPage(1); }}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium ${category === c.slug ? "bg-primary text-white" : "bg-accent"}`}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <select
+            value={sort}
+            onChange={(e) => { setSort(e.target.value); setPage(1); }}
+            className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>Urutkan: {opt.label}</option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
