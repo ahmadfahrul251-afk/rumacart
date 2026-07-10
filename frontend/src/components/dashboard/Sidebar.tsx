@@ -50,7 +50,8 @@ export function DashboardSidebar({ role }: { role: string }) {
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-black/5 bg-white p-4 md:flex">
       <Link href="/" className="mb-6 flex items-center gap-2">
-        <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-white font-bold">R</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="RumaCart" className="h-9 w-9 rounded-xl" />
         <span className="font-bold text-primary">RumaCart</span>
       </Link>
 

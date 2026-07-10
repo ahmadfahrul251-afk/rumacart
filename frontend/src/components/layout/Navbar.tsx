@@ -30,7 +30,8 @@ export function Navbar() {
     <header className="sticky top-0 z-50 border-b border-black/5 bg-white/80 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-white font-bold">R</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="RumaCart" className="h-9 w-9 rounded-xl" />
           <span className="text-lg font-bold text-primary">RumaCart</span>
         </Link>
 

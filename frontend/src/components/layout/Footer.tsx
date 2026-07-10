@@ -6,7 +6,8 @@ export function Footer() {
       <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-4">
         <div>
           <div className="mb-3 flex items-center gap-2">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-white font-bold">R</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="RumaCart" className="h-9 w-9 rounded-xl" />
             <span className="text-lg font-bold text-primary">RumaCart</span>
           </div>
           <p className="text-sm text-ink/60">
