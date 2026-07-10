@@ -73,11 +73,19 @@ export default function OrdersPage() {
                   <span className="text-sm text-ink/60">Total</span>
                   <span className="font-semibold text-primary">{formatRupiah(o.total)}</span>
                 </div>
-                {needsPayment && (
-                  <Link href={`/orders/${o.id}/payment`} className="btn-primary mt-3 w-full !py-2 text-sm">
-                    Lanjutkan Pembayaran
+                <div className="mt-3 flex gap-2">
+                  <Link
+                    href={`/orders/${o.id}`}
+                    className="flex-1 rounded-xl border border-black/10 py-2 text-center text-sm font-medium hover:bg-accent"
+                  >
+                    Lacak Pesanan
                   </Link>
-                )}
+                  {needsPayment && (
+                    <Link href={`/orders/${o.id}/payment`} className="btn-primary flex-1 !py-2 text-sm">
+                      Lanjutkan Pembayaran
+                    </Link>
+                  )}
+                </div>
               </div>
             );
           })}

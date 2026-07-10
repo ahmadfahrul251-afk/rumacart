@@ -4,6 +4,7 @@ import {
   myOrders,
   listOrders,
   getOrder,
+  trackOrder,
   updateStatus,
   payOrder,
   verifyPayment,
@@ -21,6 +22,7 @@ router.get("/my", requireAuth, myOrders);
 router.get("/courier/assigned", requireAuth, requireRole("KURIR"), courierOrders);
 router.get("/awaiting-verification", requireAuth, requireRole(...financeRoles), listAwaitingVerification);
 router.get("/", requireAuth, requireRole(...staffRoles), listOrders);
+router.get("/:id/track", requireAuth, trackOrder);
 router.get("/:id", requireAuth, getOrder);
 router.patch("/:id/status", requireAuth, requireRole(...staffRoles, "KURIR"), updateStatus);
 router.patch("/:id/pay", requireAuth, payOrder);

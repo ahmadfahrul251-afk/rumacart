@@ -309,8 +309,25 @@ model Order {
   voucher  Voucher?         @relation(fields: [voucherId], references: [id])
   items    OrderItem[]
   payment  Payment?
+  statusHistory OrderStatusHistory[]
 
   @@map("orders")
+}
+
+// Riwayat perpindahan status order, dicatat otomatis tiap kali status berubah.
+// Dipakai buat tampilkan timeline pelacakan pesanan ke customer (kapan diproses,
+// disiapkan, diambil kurir, dikirim, selesai) — fokus di titik Point & waktu,
+// bukan lacak GPS kurir secara live.
+model OrderStatusHistory {
+  id        String      @id @default(cuid())
+  orderId   String
+  status    OrderStatus
+  note      String?
+  createdAt DateTime    @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("order_status_history")
 }
 
 model OrderItem {

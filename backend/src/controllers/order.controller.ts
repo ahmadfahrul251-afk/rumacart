@@ -45,6 +45,25 @@ export async function myOrders(req: Request, res: Response) {
   return ok(res, orders);
 }
 
+// GET /api/orders/:id/track — dipakai halaman pelacakan customer, isinya lebih
+// detail dari myOrders (sertakan statusHistory + info Point lengkap) tapi hanya
+// bisa diakses pemilik order-nya sendiri.
+export async function trackOrder(req: Request, res: Response) {
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: {
+      items: { include: { product: true } },
+      point: true,
+      address: true,
+      payment: true,
+      statusHistory: { orderBy: { createdAt: "asc" } },
+    },
+  });
+  if (!order) return fail(res, "Order tidak ditemukan", 404);
+  if (order.customerId !== req.user!.userId) return fail(res, "Kamu tidak punya akses ke order ini", 403);
+  return ok(res, order);
+}
+
 // GET /api/orders — semua order (untuk Admin/Gudang/Kasir), bisa difilter status
 export async function listOrders(req: Request, res: Response) {
   const { status, pointId } = req.query as Record<string, string>;
@@ -78,7 +97,11 @@ export async function updateStatus(req: Request, res: Response) {
 
   const order = await prisma.order.update({
     where: { id: req.params.id },
-    data: { status, ...(courierId ? { courierId } : {}) },
+    data: {
+      status,
+      ...(courierId ? { courierId } : {}),
+      statusHistory: { create: { status } },
+    },
     include: { payment: true },
   });
 

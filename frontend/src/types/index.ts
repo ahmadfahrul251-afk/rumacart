@@ -42,6 +42,7 @@ export interface FulfillmentPoint {
   code: string;
   address: string;
   city: string;
+  phone?: string | null;
   latitude: number;
   longitude: number;
 }
@@ -87,6 +88,13 @@ export interface Payment {
   paidAt?: string | null;
 }
 
+export interface OrderStatusHistory {
+  id: string;
+  status: OrderStatus;
+  note?: string | null;
+  createdAt: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -102,8 +110,10 @@ export interface Order {
   createdAt: string;
   items: OrderItem[];
   point?: FulfillmentPoint;
+  address?: Address;
   payment?: Payment;
   customer?: { name: string; phone?: string | null };
+  statusHistory?: OrderStatusHistory[];
 }
 
 export interface Cashflow {

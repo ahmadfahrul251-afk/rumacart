@@ -100,6 +100,7 @@ export async function createOrder(input: CreateOrderInput) {
         notes: input.notes,
         items: { create: orderItemsData },
         payment: { create: { method: input.paymentMethod, amount: total, status: "PENDING" } },
+        statusHistory: { create: { status: "PENDING" } },
       },
       include: { items: true, payment: true, point: true },
     });
