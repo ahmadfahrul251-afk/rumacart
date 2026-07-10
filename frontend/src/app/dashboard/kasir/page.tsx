@@ -19,6 +19,7 @@ function KasirContent() {
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [printing, setPrinting] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Fokus otomatis ke kolom cari/scan supaya kasir bisa langsung scan
@@ -65,6 +66,17 @@ function KasirContent() {
 
   const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
 
+  async function printReceipt(orderId: string) {
+    setPrinting(true);
+    try {
+      await api.openFile(`/orders/${orderId}/receipt`);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   async function checkout() {
     if (lines.length === 0) return;
     setSubmitting(true);
@@ -78,6 +90,7 @@ function KasirContent() {
       setLastOrder(order);
       setLines([]);
       searchInputRef.current?.focus();
+      printReceipt(order.id);
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -173,6 +186,13 @@ function KasirContent() {
               <p className="mb-1 flex items-center gap-1 font-semibold"><Printer size={12} /> Struk {lastOrder.orderNumber}</p>
               <p>Total: {formatRupiah(lastOrder.total)}</p>
               <p>Pembayaran: {lastOrder.paymentMethod}</p>
+              <button
+                onClick={() => printReceipt(lastOrder.id)}
+                disabled={printing}
+                className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-accent py-1.5 font-medium hover:bg-primary-light hover:text-primary disabled:opacity-50"
+              >
+                <Printer size={12} /> {printing ? "Membuka..." : "Cetak Ulang Struk"}
+              </button>
             </div>
           )}
         </div>

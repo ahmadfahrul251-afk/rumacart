@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { FileText } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -21,7 +22,20 @@ export default function OrderTrackingPage() {
   const { user, loading: authLoading } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  async function downloadInvoice() {
+    if (!order) return;
+    setDownloading(true);
+    try {
+      await api.openFile(`/orders/${order.id}/invoice`);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   function load() {
     api
@@ -90,11 +104,20 @@ export default function OrderTrackingPage() {
               {new Date(order.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}
             </p>
           </div>
-          {needsPayment && (
-            <Link href={`/orders/${order.id}/payment`} className="btn-primary !py-2 !px-4 text-sm">
-              Lanjutkan Pembayaran
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={downloadInvoice}
+              disabled={downloading}
+              className="flex items-center gap-1.5 rounded-xl border border-black/10 px-4 py-2 text-sm font-medium hover:bg-accent disabled:opacity-50"
+            >
+              <FileText size={15} /> {downloading ? "Membuka..." : "Unduh Invoice"}
+            </button>
+            {needsPayment && (
+              <Link href={`/orders/${order.id}/payment`} className="btn-primary !py-2 !px-4 text-sm">
+                Lanjutkan Pembayaran
+              </Link>
+            )}
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-3">

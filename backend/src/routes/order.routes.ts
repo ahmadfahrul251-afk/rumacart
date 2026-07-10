@@ -11,6 +11,7 @@ import {
   listAwaitingVerification,
   courierOrders,
 } from "../controllers/order.controller";
+import { downloadInvoice, downloadReceipt } from "../controllers/pdf.controller";
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
 
 const router = Router();
@@ -23,6 +24,8 @@ router.get("/courier/assigned", requireAuth, requireRole("KURIR"), courierOrders
 router.get("/awaiting-verification", requireAuth, requireRole(...financeRoles), listAwaitingVerification);
 router.get("/", requireAuth, requireRole(...staffRoles), listOrders);
 router.get("/:id/track", requireAuth, trackOrder);
+router.get("/:id/invoice", requireAuth, downloadInvoice);
+router.get("/:id/receipt", requireAuth, downloadReceipt);
 router.get("/:id", requireAuth, getOrder);
 router.patch("/:id/status", requireAuth, requireRole(...staffRoles, "KURIR"), updateStatus);
 router.patch("/:id/pay", requireAuth, payOrder);

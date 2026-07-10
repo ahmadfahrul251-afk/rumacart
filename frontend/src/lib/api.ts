@@ -51,6 +51,20 @@ async function uploadFile<T>(path: string, file: File, fieldName = "image"): Pro
   return json.data;
 }
 
+// Buka file (PDF, dll) yang butuh header Authorization di tab baru — <a href>
+// biasa tidak bisa membawa header, jadi kita fetch dulu sebagai blob lalu buka.
+async function openFile(path: string): Promise<void> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("rumacart_token") : null;
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) throw new Error("Gagal membuka dokumen");
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) =>
@@ -61,4 +75,5 @@ export const api = {
     request<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
   upload: uploadFile,
+  openFile,
 };
