@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket, Users } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
@@ -16,6 +16,7 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
     { href: "/dashboard/admin/vouchers", label: "Voucher & Promo", icon: Ticket },
     { href: "/dashboard/admin/cashflow", label: "Cashflow", icon: Wallet },
+    { href: "/dashboard/admin/users", label: "Kelola Akun", icon: Users },
   ],
   SUPER_ADMIN: [
     { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
@@ -26,6 +27,17 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
     { href: "/dashboard/admin/vouchers", label: "Voucher & Promo", icon: Ticket },
+    { href: "/dashboard/admin/cashflow", label: "Cashflow", icon: Wallet },
+    { href: "/dashboard/admin/users", label: "Kelola Akun", icon: Users },
+  ],
+  // Admin Point: kelola 1 Point saja. Belum ada scoping data per Point (Round 2),
+  // jadi Supplier/PO (lokal per Point) & Kelola Akun (khusus Admin Pusat) belum ditampilkan.
+  ADMIN_POINT: [
+    { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
+    { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
+    { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
+    { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
     { href: "/dashboard/admin/cashflow", label: "Cashflow", icon: Wallet },
   ],
   GUDANG: [

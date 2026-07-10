@@ -7,6 +7,7 @@ import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { Product } from "@/types";
 import { formatRupiah } from "@/lib/utils";
@@ -113,10 +114,11 @@ function AdminProductsContent() {
 }
 
 export default function AdminProductsPage() {
+  const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
-        <DashboardSidebar role="ADMIN" />
+        <DashboardSidebar role={user?.role || "ADMIN"} />
         <AdminProductsContent />
       </div>
     </RoleGuard>

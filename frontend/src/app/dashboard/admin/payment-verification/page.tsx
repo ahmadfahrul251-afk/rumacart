@@ -96,7 +96,7 @@ function PaymentVerificationContent() {
 export default function PaymentVerificationPage() {
   const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "KASIR"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "KASIR", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
         <DashboardSidebar role={user?.role || "ADMIN"} />
         <PaymentVerificationContent />

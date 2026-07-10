@@ -130,12 +130,18 @@ export interface Cashflow {
   point?: FulfillmentPoint | null;
 }
 
+export type Role = "SUPER_ADMIN" | "ADMIN" | "ADMIN_POINT" | "KASIR" | "GUDANG" | "KURIR" | "CUSTOMER";
+
 export interface User {
   id: string;
   name: string;
   email: string;
   phone?: string | null;
-  role: "SUPER_ADMIN" | "ADMIN" | "KASIR" | "GUDANG" | "KURIR" | "CUSTOMER";
+  role: Role;
+  managedPointId?: string | null;
+  managedPoint?: { id: string; name: string; code: string } | null;
+  isActive?: boolean;
+  createdAt?: string;
 }
 
 export interface Supplier {

@@ -15,6 +15,7 @@ datasource db {
 enum Role {
   SUPER_ADMIN
   ADMIN
+  ADMIN_POINT // Admin 1 Point/pickup point tertentu — data terkunci ke managedPointId
   KASIR
   GUDANG
   KURIR
@@ -82,28 +83,37 @@ enum NotificationType {
   SYSTEM  // pengumuman umum
 }
 
+enum StockTransferStatus {
+  SENT      // dikirim dari Pusat, dalam perjalanan ke Point
+  RECEIVED  // sudah dikonfirmasi diterima Point, stok sudah masuk
+  CANCELLED
+}
+
 // ================== USER & AUTH ==================
 
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  phone        String?
-  role         Role     @default(CUSTOMER)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  email          String   @unique
+  passwordHash   String
+  phone          String?
+  role           Role     @default(CUSTOMER)
+  managedPointId String?  // hanya diisi untuk role ADMIN_POINT — Point yang dikelola
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  addresses      Address[]
-  ordersAsCustomer Order[]  @relation("CustomerOrders")
-  ordersAsCourier  Order[]  @relation("CourierOrders")
+  managedPoint     FulfillmentPoint?  @relation("PointAdmin", fields: [managedPointId], references: [id])
+  addresses        Address[]
+  ordersAsCustomer Order[]            @relation("CustomerOrders")
+  ordersAsCourier  Order[]            @relation("CourierOrders")
   inventoryMoves   InventoryHistory[]
   cashflowEntries  Cashflow[]
   wishlist         Wishlist[]
   reviews          Review[]
   purchaseOrders   PurchaseOrder[]
   notifications    Notification[]
+  stockTransfers   StockTransfer[]
 
   @@map("users")
 }
@@ -170,6 +180,7 @@ model Product {
   wishlist   Wishlist[]
   reviews    Review[]
   purchaseOrderItems PurchaseOrderItem[]
+  stockTransferItems StockTransferItem[]
 
   @@map("products")
 }
@@ -222,6 +233,9 @@ model FulfillmentPoint {
   orders    Order[]
   cashflow  Cashflow[]
   purchaseOrders PurchaseOrder[]
+  admins         User[]           @relation("PointAdmin")
+  localSuppliers Supplier[]
+  stockTransfers StockTransfer[]
 
   @@map("fulfillment_points")
 }
@@ -389,9 +403,11 @@ model Supplier {
   phone       String?
   email       String?
   address     String?
+  pointId     String?  // null = supplier Pusat (bisa dipakai semua Point). Diisi = supplier lokal, cuma dipakai Point itu.
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
+  point          FulfillmentPoint? @relation(fields: [pointId], references: [id])
   purchaseOrders PurchaseOrder[]
 
   @@map("suppliers")
@@ -429,6 +445,40 @@ model PurchaseOrderItem {
   product Product       @relation(fields: [productId], references: [id])
 
   @@map("purchase_order_items")
+}
+
+// ================== TRANSFER STOK (PUSAT -> POINT) ==================
+// Admin Pusat berperan sebagai "supplier internal" buat tiap Point — beda dari
+// PurchaseOrder (yang buat beli dari Supplier eksternal/lokal), transfer ini
+// tidak melibatkan uang/Supplier, cuma pemindahan stok dari Pusat ke Point.
+
+model StockTransfer {
+  id             String              @id @default(cuid())
+  transferNumber String              @unique
+  toPointId      String
+  status         StockTransferStatus @default(SENT)
+  notes          String?
+  createdById    String?
+  createdAt      DateTime            @default(now())
+  receivedAt     DateTime?
+
+  toPoint   FulfillmentPoint    @relation(fields: [toPointId], references: [id])
+  createdBy User?               @relation(fields: [createdById], references: [id])
+  items     StockTransferItem[]
+
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id         String @id @default(cuid())
+  transferId String
+  productId  String
+  qty        Int
+
+  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product       @relation(fields: [productId], references: [id])
+
+  @@map("stock_transfer_items")
 }
 
 // ================== NOTIFIKASI ==================

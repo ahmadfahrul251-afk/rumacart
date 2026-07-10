@@ -14,6 +14,7 @@ export function getDashboardPath(role?: string): string {
   switch (role) {
     case "SUPER_ADMIN":
     case "ADMIN":
+    case "ADMIN_POINT":
       return "/dashboard/admin";
     case "GUDANG":
       return "/dashboard/gudang";

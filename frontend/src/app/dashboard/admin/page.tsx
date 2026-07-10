@@ -6,6 +6,7 @@ import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Badge } from "@/components/ui/Badge";
+import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { Order } from "@/types";
 import { formatRupiah } from "@/lib/utils";
@@ -106,10 +107,11 @@ function AdminDashboardContent() {
 }
 
 export default function AdminDashboardPage() {
+  const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
-        <DashboardSidebar role="ADMIN" />
+        <DashboardSidebar role={user?.role || "ADMIN"} />
         <AdminDashboardContent />
       </div>
     </RoleGuard>
