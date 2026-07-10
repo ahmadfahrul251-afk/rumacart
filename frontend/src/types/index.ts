@@ -15,6 +15,7 @@ export interface Product {
   description?: string | null;
   brand?: string | null;
   sku: string;
+  barcode?: string | null;
   weightGram: number;
   costPrice: number;
   sellPrice: number;

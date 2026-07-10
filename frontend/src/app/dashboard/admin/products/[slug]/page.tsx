@@ -55,6 +55,7 @@ function EditProductContent() {
       await api.put(`/products/${product.id}`, {
         name: product.name,
         description: product.description,
+        barcode: product.barcode || null,
         costPrice: product.costPrice,
         sellPrice: product.sellPrice,
         discountPrice: product.discountPrice || null,
@@ -121,6 +122,21 @@ function EditProductContent() {
               rows={4}
               className="w-full rounded-xl border border-black/10 px-4 py-2.5 text-sm outline-none focus:border-primary"
             />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-sm font-medium">SKU</label>
+              <Input value={product.sku} disabled className="opacity-60" />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Barcode</label>
+              <Input
+                value={product.barcode || ""}
+                onChange={(e) => setProduct({ ...product, barcode: e.target.value || null })}
+                placeholder="Scan atau ketik manual"
+              />
+              <p className="mt-1 text-xs text-ink/40">Dipakai untuk scan cepat di halaman Kasir (POS).</p>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

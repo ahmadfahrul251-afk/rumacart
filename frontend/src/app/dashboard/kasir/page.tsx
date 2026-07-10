@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Trash2, Printer } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, Trash2, Printer, ScanBarcode } from "lucide-react";
 import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/Input";
@@ -18,12 +18,36 @@ function KasirContent() {
   const [payment, setPayment] = useState<"COD" | "TRANSFER" | "EWALLET">("COD");
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Fokus otomatis ke kolom cari/scan supaya kasir bisa langsung scan
+  // barcode berikutnya tanpa perlu klik ke input lagi.
+  useEffect(() => {
+    searchInputRef.current?.focus();
+  }, []);
 
   async function handleSearch(q: string) {
     setSearch(q);
+    setScanError("");
     if (!q) return setResults([]);
     const res = await api.get<{ items: Product[] }>(`/products?search=${encodeURIComponent(q)}&limit=6`);
     setResults(res.items);
+  }
+
+  // Scanner barcode biasanya mengetik kode lalu langsung "Enter" secara otomatis.
+  // Saat Enter ditekan, coba cari produk lewat barcode persis dulu (bukan cari nama).
+  async function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const code = search.trim();
+    if (!code) return;
+    try {
+      const product = await api.get<Product>(`/products/barcode/${encodeURIComponent(code)}`);
+      addLine(product);
+    } catch {
+      setScanError(`Barcode "${code}" tidak ditemukan.`);
+    }
   }
 
   function addLine(p: Product) {
@@ -35,6 +59,8 @@ function KasirContent() {
     });
     setResults([]);
     setSearch("");
+    setScanError("");
+    searchInputRef.current?.focus();
   }
 
   const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
@@ -51,6 +77,7 @@ function KasirContent() {
       });
       setLastOrder(order);
       setLines([]);
+      searchInputRef.current?.focus();
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -67,11 +94,19 @@ function KasirContent() {
           <div className="relative mb-4">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink/40" />
             <Input
+              ref={searchInputRef}
               placeholder="Cari produk / scan barcode..."
               value={search}
               onChange={(e) => handleSearch(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               className="pl-9"
+              autoFocus
             />
+            {scanError && (
+              <p className="mt-1.5 flex items-center gap-1 text-xs font-medium text-red-600">
+                <ScanBarcode size={12} /> {scanError}
+              </p>
+            )}
             {results.length > 0 && (
               <div className="absolute z-10 mt-1 w-full rounded-xl border border-black/10 bg-white shadow-soft">
                 {results.map((p) => (

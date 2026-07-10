@@ -38,6 +38,17 @@ export async function listProducts(req: Request, res: Response) {
   return ok(res, { items: data, total, page: Number(page), totalPages: Math.ceil(total / take) });
 }
 
+// GET /api/products/barcode/:code — exact match, dipakai POS Kasir saat scan barcode.
+export async function getProductByBarcode(req: Request, res: Response) {
+  const { code } = req.params;
+  const product = await prisma.product.findFirst({
+    where: { barcode: code, isActive: true },
+    include: { category: true, inventory: true },
+  });
+  if (!product) return fail(res, "Produk dengan barcode ini tidak ditemukan", 404);
+  return ok(res, withStockSummary(product));
+}
+
 export async function getProductBySlug(req: Request, res: Response) {
   const { slug } = req.params;
   const product = await prisma.product.findUnique({
