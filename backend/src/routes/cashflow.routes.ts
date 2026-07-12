@@ -3,7 +3,7 @@ import { listCashflow, cashflowSummary, createCashflow } from "../controllers/ca
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
 
 const router = Router();
-const staffRoles = ["ADMIN", "SUPER_ADMIN"];
+const staffRoles = ["ADMIN", "SUPER_ADMIN", "ADMIN_POINT"];
 
 router.get("/", requireAuth, requireRole(...staffRoles), listCashflow);
 router.get("/summary", requireAuth, requireRole(...staffRoles), cashflowSummary);

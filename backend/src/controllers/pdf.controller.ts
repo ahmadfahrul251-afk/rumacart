@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import PDFDocument from "pdfkit";
 import { prisma } from "../config/db";
 import { fail } from "../utils/response";
+import { canAccessPoint } from "../utils/pointScope";
 
 const PAYMENT_LABEL: Record<string, string> = {
   COD: "Bayar di Tempat (COD)",
@@ -33,10 +34,11 @@ async function loadOrderForDocument(id: string) {
 }
 
 // Semua endpoint di file ini: customer cuma boleh unduh dokumen order miliknya
-// sendiri, staff (non-CUSTOMER) boleh unduh order siapa saja (perlu buat cetak di POS).
+// sendiri, Admin Point cuma boleh unduh order di Point-nya sendiri, staff lain
+// (non-CUSTOMER, non-ADMIN_POINT) boleh unduh order siapa saja (perlu buat cetak di POS).
 function canAccess(order: any, req: Request) {
   if (req.user!.role === "CUSTOMER") return order.customerId === req.user!.userId;
-  return true;
+  return canAccessPoint(req, order.pointId);
 }
 
 // GET /api/orders/:id/invoice — invoice formal ukuran A4, dipakai customer.

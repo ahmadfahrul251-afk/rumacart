@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Cashflow } from "@/types";
+import { Cashflow, FulfillmentPoint } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
 interface CashflowSummary { cashIn: number; cashOut: number; netCash: number; totalModal: number; totalProfit: number; }
@@ -19,10 +19,14 @@ interface CashflowSummary { cashIn: number; cashOut: number; netCash: number; to
 const EMPTY_FORM = { type: "OUT" as "IN" | "OUT", category: "", amount: "", description: "" };
 
 function CashflowContent() {
+  const { user } = useAuth();
+  const isPusat = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const [entries, setEntries] = useState<Cashflow[] | null>(null);
   const [summary, setSummary] = useState<CashflowSummary | null>(null);
+  const [points, setPoints] = useState<FulfillmentPoint[]>([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [pointId, setPointId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -33,12 +37,16 @@ function CashflowContent() {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    if (isPusat && pointId) params.set("pointId", pointId);
     const qs = params.toString() ? `?${params.toString()}` : "";
     api.get<Cashflow[]>(`/cashflow${qs}`).then(setEntries).catch(() => setEntries([]));
     api.get<CashflowSummary>(`/cashflow/summary${qs}`).then(setSummary).catch(() => {});
   }
 
-  useEffect(load, [from, to]);
+  useEffect(load, [from, to, pointId]);
+  useEffect(() => {
+    if (isPusat) api.get<FulfillmentPoint[]>("/points").then(setPoints).catch(() => {});
+  }, [isPusat]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,8 +89,23 @@ function CashflowContent() {
           <label className="mb-1 block text-xs font-medium text-ink/60">Sampai Tanggal</label>
           <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
         </div>
-        {(from || to) && (
-          <button onClick={() => { setFrom(""); setTo(""); }} className="pb-2.5 text-xs font-medium text-primary hover:underline">
+        {isPusat && (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-ink/60">Point</label>
+            <select
+              value={pointId}
+              onChange={(e) => setPointId(e.target.value)}
+              className="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm outline-none focus:border-primary"
+            >
+              <option value="">Semua Point</option>
+              {points.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        {(from || to || pointId) && (
+          <button onClick={() => { setFrom(""); setTo(""); setPointId(""); }} className="pb-2.5 text-xs font-medium text-primary hover:underline">
             Reset filter
           </button>
         )}
@@ -166,6 +189,7 @@ function CashflowContent() {
             <thead className="text-left text-ink/50">
               <tr>
                 <th className="pb-2">Tanggal</th>
+                {isPusat && <th className="pb-2">Point</th>}
                 <th className="pb-2">Kategori</th>
                 <th className="pb-2">Keterangan</th>
                 <th className="pb-2">Modal / Untung</th>
@@ -176,6 +200,7 @@ function CashflowContent() {
               {entries.map((e) => (
                 <tr key={e.id} className="border-t border-black/5">
                   <td className="py-2 text-ink/60">{new Date(e.createdAt).toLocaleDateString("id-ID", { dateStyle: "medium" })}</td>
+                  {isPusat && <td className="py-2 text-ink/60">{e.point?.name || "Pusat"}</td>}
                   <td className="py-2">{e.category}</td>
                   <td className="py-2 text-ink/60">{e.description || "-"}</td>
                   <td className="py-2 text-xs text-ink/60">

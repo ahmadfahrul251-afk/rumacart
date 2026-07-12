@@ -3,6 +3,7 @@ import { prisma } from "../config/db";
 import { createOrder } from "../services/order.service";
 import { createNotification } from "../services/notification.service";
 import { ok, fail } from "../utils/response";
+import { scopedPointId, canAccessPoint } from "../utils/pointScope";
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "menunggu diproses",
@@ -64,9 +65,11 @@ export async function trackOrder(req: Request, res: Response) {
   return ok(res, order);
 }
 
-// GET /api/orders — semua order (untuk Admin/Gudang/Kasir), bisa difilter status
+// GET /api/orders — semua order (untuk Admin/Gudang/Kasir), bisa difilter status.
+// Admin Point otomatis cuma lihat order di Point-nya sendiri.
 export async function listOrders(req: Request, res: Response) {
-  const { status, pointId } = req.query as Record<string, string>;
+  const { status } = req.query as Record<string, string>;
+  const pointId = scopedPointId(req);
   const where: any = {};
   if (status) where.status = status;
   if (pointId) where.pointId = pointId;
@@ -86,6 +89,7 @@ export async function getOrder(req: Request, res: Response) {
     include: { items: { include: { product: true } }, point: true, customer: true, address: true, payment: true },
   });
   if (!order) return fail(res, "Order tidak ditemukan", 404);
+  if (!canAccessPoint(req, order.pointId)) return fail(res, "Order ini bukan milik Point kamu", 403);
   return ok(res, order);
 }
 
@@ -94,6 +98,10 @@ const VALID_STATUS = ["PENDING", "PROCESSED", "PREPARED", "PICKED_UP", "SHIPPED"
 export async function updateStatus(req: Request, res: Response) {
   const { status, courierId } = req.body;
   if (!VALID_STATUS.includes(status)) return fail(res, "Status tidak valid", 422);
+
+  const existing = await prisma.order.findUnique({ where: { id: req.params.id }, select: { pointId: true } });
+  if (!existing) return fail(res, "Order tidak ditemukan", 404);
+  if (!canAccessPoint(req, existing.pointId)) return fail(res, "Order ini bukan milik Point kamu", 403);
 
   const order = await prisma.order.update({
     where: { id: req.params.id },
@@ -162,6 +170,7 @@ export async function verifyPayment(req: Request, res: Response) {
     include: { payment: true },
   });
   if (!order) return fail(res, "Order tidak ditemukan", 404);
+  if (!canAccessPoint(req, order.pointId)) return fail(res, "Order ini bukan milik Point kamu", 403);
   if (!order.payment) return fail(res, "Data pembayaran tidak ditemukan", 404);
   if (order.payment.status === "PAID") return fail(res, "Pembayaran ini sudah diverifikasi sebelumnya", 400);
 
@@ -181,10 +190,15 @@ export async function verifyPayment(req: Request, res: Response) {
   return ok(res, payment, "Pembayaran diverifikasi & ditandai lunas");
 }
 
-// GET /api/orders/awaiting-verification — daftar order yang menunggu verifikasi manual (Admin/Kasir)
-export async function listAwaitingVerification(_req: Request, res: Response) {
+// GET /api/orders/awaiting-verification — daftar order yang menunggu verifikasi manual
+// (Admin Pusat/Kasir/Admin Point). Admin Point otomatis cuma lihat punya Point-nya sendiri.
+export async function listAwaitingVerification(req: Request, res: Response) {
+  const pointId = scopedPointId(req);
+  const where: any = { payment: { status: "AWAITING_VERIFICATION" } };
+  if (pointId) where.pointId = pointId;
+
   const orders = await prisma.order.findMany({
-    where: { payment: { status: "AWAITING_VERIFICATION" } },
+    where,
     include: { items: { include: { product: true } }, point: true, customer: true, payment: true },
     orderBy: { createdAt: "asc" },
   });

@@ -1,10 +1,13 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/db";
 import { ok, fail } from "../utils/response";
+import { scopedPointId, resolveWritePointId } from "../utils/pointScope";
 
 // GET /api/cashflow?from=&to=&pointId=
+// Admin Point otomatis cuma lihat cashflow Point-nya sendiri.
 export async function listCashflow(req: Request, res: Response) {
-  const { from, to, pointId } = req.query as Record<string, string>;
+  const { from, to } = req.query as Record<string, string>;
+  const pointId = scopedPointId(req);
   const where: any = {};
   if (pointId) where.pointId = pointId;
   if (from || to) {
@@ -24,7 +27,9 @@ export async function listCashflow(req: Request, res: Response) {
 // GET /api/cashflow/summary — dipakai Dashboard Cashflow
 export async function cashflowSummary(req: Request, res: Response) {
   const { from, to } = req.query as Record<string, string>;
+  const pointId = scopedPointId(req);
   const where: any = {};
+  if (pointId) where.pointId = pointId;
   if (from || to) {
     where.createdAt = {};
     if (from) where.createdAt.gte = new Date(from);
@@ -50,9 +55,11 @@ export async function cashflowSummary(req: Request, res: Response) {
 }
 
 // POST /api/cashflow — input manual (misal: pengeluaran operasional, gaji, dll)
+// Admin Point: pointId dari body diabaikan, dipaksa pakai Point yang dia kelola.
 export async function createCashflow(req: Request, res: Response) {
-  const { type, category, amount, description, pointId } = req.body;
+  const { type, category, amount, description } = req.body;
   if (!type || !category || !amount) return fail(res, "type, category, amount wajib diisi", 422);
+  const pointId = resolveWritePointId(req, req.body.pointId);
 
   const entry = await prisma.cashflow.create({
     data: { type, category, amount: Number(amount), description, pointId, createdById: req.user?.userId },

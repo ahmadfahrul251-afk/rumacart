@@ -72,7 +72,7 @@ function PaymentVerificationContent() {
                   </span>
                 </div>
                 <p className="text-sm text-ink/60">
-                  {o.customer?.name || "Customer"} · {o.items.length} item · {new Date(o.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}
+                  {o.customer?.name || "Customer"} · {o.point?.name ? `${o.point.name} · ` : ""}{o.items.length} item · {new Date(o.createdAt).toLocaleDateString("id-ID", { dateStyle: "long" })}
                 </p>
               </div>
               <div className="flex items-center gap-3">

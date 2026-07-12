@@ -15,8 +15,8 @@ import { downloadInvoice, downloadReceipt } from "../controllers/pdf.controller"
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
 
 const router = Router();
-const staffRoles = ["ADMIN", "SUPER_ADMIN", "GUDANG", "KASIR"];
-const financeRoles = ["ADMIN", "SUPER_ADMIN", "KASIR"];
+const staffRoles = ["ADMIN", "SUPER_ADMIN", "GUDANG", "KASIR", "ADMIN_POINT"];
+const financeRoles = ["ADMIN", "SUPER_ADMIN", "KASIR", "ADMIN_POINT"];
 
 router.post("/", requireAuth, checkout);
 router.get("/my", requireAuth, myOrders);

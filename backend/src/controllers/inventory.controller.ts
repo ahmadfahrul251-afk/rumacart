@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/db";
 import { ok, fail } from "../utils/response";
+import { scopedPointId, resolveWritePointId } from "../utils/pointScope";
 
-// GET /api/inventory?pointId=xxx — daftar stok produk di satu Point (atau semua)
+// GET /api/inventory?pointId=xxx — daftar stok produk di satu Point (atau semua).
+// Admin Point otomatis terkunci ke Point-nya sendiri, tidak peduli query yang dikirim.
 export async function listInventory(req: Request, res: Response) {
-  const { pointId } = req.query as Record<string, string>;
+  const pointId = scopedPointId(req);
   const where = pointId ? { pointId } : {};
   const inventory = await prisma.inventory.findMany({
     where,
@@ -15,12 +17,14 @@ export async function listInventory(req: Request, res: Response) {
 }
 
 // GET /api/inventory/stats — dipakai Dashboard Inventory
-export async function inventoryStats(_req: Request, res: Response) {
+export async function inventoryStats(req: Request, res: Response) {
+  const pointId = scopedPointId(req);
+  const invWhere = pointId ? { pointId } : {};
   const [totalProducts, totalSku, outOfStock, allInventory] = await Promise.all([
     prisma.product.count({ where: { isActive: true } }),
     prisma.product.count({ where: { isActive: true } }), // 1 produk = 1 SKU di model ini
-    prisma.inventory.count({ where: { stock: 0 } }),
-    prisma.inventory.findMany({ include: { product: true } }),
+    prisma.inventory.count({ where: { ...invWhere, stock: 0 } }),
+    prisma.inventory.findMany({ where: invWhere, include: { product: true } }),
   ]);
 
   // Hitung manual "stok menipis" (stock > 0 tapi <= minStock) karena Prisma
@@ -38,8 +42,10 @@ export async function inventoryStats(_req: Request, res: Response) {
 }
 
 // POST /api/inventory/stock-in  { productId, pointId, qty, note }
+// Admin Point: pointId dari body diabaikan, dipaksa pakai Point yang dia kelola.
 export async function stockIn(req: Request, res: Response) {
-  const { productId, pointId, qty, note } = req.body;
+  const { productId, qty, note } = req.body;
+  const pointId = resolveWritePointId(req, req.body.pointId);
   if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
   const inventory = await upsertInventory(productId, pointId, qty);
@@ -51,7 +57,8 @@ export async function stockIn(req: Request, res: Response) {
 
 // POST /api/inventory/stock-out  { productId, pointId, qty, note }
 export async function stockOut(req: Request, res: Response) {
-  const { productId, pointId, qty, note } = req.body;
+  const { productId, qty, note } = req.body;
+  const pointId = resolveWritePointId(req, req.body.pointId);
   if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
   const existing = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
@@ -102,7 +109,8 @@ export async function transferStock(req: Request, res: Response) {
 // POST /api/inventory/adjustment  { productId, pointId, newStock, note }
 // Dipakai untuk hasil Stock Opname (stok fisik vs sistem berbeda).
 export async function adjustment(req: Request, res: Response) {
-  const { productId, pointId, newStock, note } = req.body;
+  const { productId, newStock, note } = req.body;
+  const pointId = resolveWritePointId(req, req.body.pointId);
   if (!productId || !pointId || newStock == null) return fail(res, "Data tidak lengkap", 422);
 
   const existing = await prisma.inventory.upsert({
