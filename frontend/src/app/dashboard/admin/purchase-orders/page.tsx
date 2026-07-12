@@ -73,7 +73,7 @@ function PurchaseOrdersContent() {
 export default function PurchaseOrdersPage() {
   const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
         <DashboardSidebar role={user?.role || "ADMIN"} />
         <PurchaseOrdersContent />

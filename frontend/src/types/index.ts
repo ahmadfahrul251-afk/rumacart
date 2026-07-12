@@ -152,6 +152,8 @@ export interface Supplier {
   email?: string | null;
   address?: string | null;
   isActive: boolean;
+  pointId?: string | null;
+  point?: FulfillmentPoint | null;
 }
 
 export type PurchaseOrderStatus = "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED";

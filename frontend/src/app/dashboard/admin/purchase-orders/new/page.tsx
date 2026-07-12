@@ -20,6 +20,8 @@ interface ItemRow {
 
 function NewPurchaseOrderContent() {
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdminPoint = user?.role === "ADMIN_POINT";
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [points, setPoints] = useState<FulfillmentPoint[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -32,6 +34,8 @@ function NewPurchaseOrderContent() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    // GET /suppliers otomatis cuma balikin supplier pusat-wide + lokal Point-nya
+    // sendiri kalau yang login Admin Point (dikunci di backend).
     api.get<Supplier[]>("/suppliers").then(setSuppliers).catch(() => setSuppliers([]));
     api.get<FulfillmentPoint[]>("/points").then(setPoints).catch(() => setPoints([]));
     api
@@ -39,6 +43,11 @@ function NewPurchaseOrderContent() {
       .then((res) => setProducts(res.items))
       .catch(() => setProducts([]));
   }, []);
+
+  // Admin Point: Point tujuan dikunci ke Point yang dia kelola, tidak perlu dipilih manual.
+  useEffect(() => {
+    if (isAdminPoint && user?.managedPointId) setPointId(user.managedPointId);
+  }, [isAdminPoint, user?.managedPointId]);
 
   function updateItem(index: number, patch: Partial<ItemRow>) {
     setItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -108,16 +117,22 @@ function NewPurchaseOrderContent() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Point Tujuan *</label>
-            <select
-              value={pointId}
-              onChange={(e) => setPointId(e.target.value)}
-              className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            >
-              <option value="">Pilih point</option>
-              {points.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            {isAdminPoint ? (
+              <p className="rounded-xl border border-black/10 bg-accent/50 px-4 py-2.5 text-sm">
+                {user?.managedPoint?.name || "Point kamu"}
+              </p>
+            ) : (
+              <select
+                value={pointId}
+                onChange={(e) => setPointId(e.target.value)}
+                className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              >
+                <option value="">Pilih point</option>
+                {points.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="sm:col-span-2">
             <label className="mb-1 block text-sm font-medium">Catatan</label>
@@ -205,7 +220,7 @@ function NewPurchaseOrderContent() {
 export default function NewPurchaseOrderPage() {
   const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
         <DashboardSidebar role={user?.role || "ADMIN"} />
         <NewPurchaseOrderContent />

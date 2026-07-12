@@ -10,12 +10,15 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Supplier } from "@/types";
+import { Supplier, FulfillmentPoint } from "@/types";
 
-const EMPTY_FORM = { name: "", contactName: "", phone: "", email: "", address: "" };
+const EMPTY_FORM = { name: "", contactName: "", phone: "", email: "", address: "", pointId: "" };
 
 function SuppliersContent() {
+  const { user } = useAuth();
+  const isPusat = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN" || user?.role === "GUDANG";
   const [suppliers, setSuppliers] = useState<Supplier[] | null>(null);
+  const [points, setPoints] = useState<FulfillmentPoint[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -31,6 +34,15 @@ function SuppliersContent() {
   }
 
   useEffect(load, []);
+  useEffect(() => {
+    if (isPusat) api.get<FulfillmentPoint[]>("/points").then(setPoints).catch(() => {});
+  }, [isPusat]);
+
+  // Admin Point cuma boleh edit supplier lokal miliknya sendiri, bukan yang pusat-wide.
+  function canEdit(s: Supplier) {
+    if (isPusat) return true;
+    return !!s.pointId && s.pointId === user?.managedPointId;
+  }
 
   function startCreate() {
     setEditingId(null);
@@ -47,6 +59,7 @@ function SuppliersContent() {
       phone: s.phone || "",
       email: s.email || "",
       address: s.address || "",
+      pointId: s.pointId || "",
     });
     setError("");
     setShowForm(true);
@@ -61,10 +74,12 @@ function SuppliersContent() {
     setSaving(true);
     setError("");
     try {
+      const payload: Record<string, unknown> = { ...form };
+      if (!isPusat) delete payload.pointId; // Admin Point: pointId dipaksa server ke Point-nya sendiri
       if (editingId) {
-        await api.patch(`/suppliers/${editingId}`, form);
+        await api.patch(`/suppliers/${editingId}`, payload);
       } else {
-        await api.post("/suppliers", form);
+        await api.post("/suppliers", payload);
       }
       setShowForm(false);
       load();
@@ -117,6 +132,21 @@ function SuppliersContent() {
               <label className="mb-1 block text-sm font-medium">Alamat</label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
             </div>
+            {isPusat && (
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-sm font-medium">Point</label>
+                <select
+                  value={form.pointId}
+                  onChange={(e) => setForm({ ...form, pointId: e.target.value })}
+                  className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Pusat-wide (dipakai semua Point)</option>
+                  {points.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} (lokal)</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
@@ -154,6 +184,7 @@ function SuppliersContent() {
                 <th className="pb-2">Nama</th>
                 <th className="pb-2">Kontak</th>
                 <th className="pb-2">Telepon</th>
+                {isPusat && <th className="pb-2">Point</th>}
                 <th className="pb-2">Status</th>
                 <th className="pb-2"></th>
               </tr>
@@ -164,6 +195,7 @@ function SuppliersContent() {
                   <td className="py-2 font-medium">{s.name}</td>
                   <td className="py-2 text-ink/60">{s.contactName || "-"}</td>
                   <td className="py-2 text-ink/60">{s.phone || "-"}</td>
+                  {isPusat && <td className="py-2 text-ink/60">{s.point?.name || "Pusat-wide"}</td>}
                   <td className="py-2">
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -174,21 +206,25 @@ function SuppliersContent() {
                     </span>
                   </td>
                   <td className="py-2 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => startEdit(s)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-primary-light hover:text-primary"
-                      >
-                        <Pencil size={13} /> Edit
-                      </button>
-                      <button
-                        onClick={() => toggleActive(s)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-red-100 hover:text-red-600"
-                      >
-                        {s.isActive ? <Ban size={13} /> : <CheckCircle2 size={13} />}
-                        {s.isActive ? "Nonaktifkan" : "Aktifkan"}
-                      </button>
-                    </div>
+                    {canEdit(s) ? (
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => startEdit(s)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-primary-light hover:text-primary"
+                        >
+                          <Pencil size={13} /> Edit
+                        </button>
+                        <button
+                          onClick={() => toggleActive(s)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-red-100 hover:text-red-600"
+                        >
+                          {s.isActive ? <Ban size={13} /> : <CheckCircle2 size={13} />}
+                          {s.isActive ? "Nonaktifkan" : "Aktifkan"}
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-ink/40">Milik Pusat</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -203,7 +239,7 @@ function SuppliersContent() {
 export default function SuppliersPage() {
   const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "GUDANG", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
         <DashboardSidebar role={user?.role || "ADMIN"} />
         <SuppliersContent />

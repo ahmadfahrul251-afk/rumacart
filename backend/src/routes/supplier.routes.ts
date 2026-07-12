@@ -9,7 +9,7 @@ import {
 import { requireAuth, requireRole } from "../middleware/auth.middleware";
 
 const router = Router();
-const staffRoles = ["ADMIN", "SUPER_ADMIN", "GUDANG"];
+const staffRoles = ["ADMIN", "SUPER_ADMIN", "GUDANG", "ADMIN_POINT"];
 
 router.get("/", requireAuth, requireRole(...staffRoles), listSuppliers);
 router.get("/:id", requireAuth, requireRole(...staffRoles), getSupplier);
