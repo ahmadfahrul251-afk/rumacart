@@ -12,6 +12,7 @@ const STATUS_COLOR: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-600",
   ORDERED: "bg-blue-100 text-blue-700",
   RECEIVED: "bg-green-100 text-green-700",
+  SENT: "bg-blue-100 text-blue-700",
 };
 
 export function Badge({ children, tone }: { children: ReactNode; tone?: string }) {

@@ -180,6 +180,27 @@ export interface PurchaseOrder {
   point?: FulfillmentPoint;
 }
 
+export type StockTransferStatus = "SENT" | "RECEIVED" | "CANCELLED";
+
+export interface StockTransferItem {
+  id: string;
+  productId: string;
+  qty: number;
+  product?: Product;
+}
+
+export interface StockTransfer {
+  id: string;
+  transferNumber: string;
+  toPointId: string;
+  status: StockTransferStatus;
+  notes?: string | null;
+  createdAt: string;
+  receivedAt?: string | null;
+  items: StockTransferItem[];
+  toPoint?: FulfillmentPoint;
+}
+
 export type VoucherDiscountType = "FLAT" | "PERCENT";
 
 export interface Voucher {

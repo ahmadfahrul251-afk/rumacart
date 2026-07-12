@@ -15,11 +15,13 @@ import supplierRoutes from "./supplier.routes";
 import purchaseOrderRoutes from "./purchaseOrder.routes";
 import notificationRoutes from "./notification.routes";
 import userRoutes from "./user.routes";
+import stockTransferRoutes from "./stockTransfer.routes";
 
 const router = Router();
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
+router.use("/stock-transfers", stockTransferRoutes);
 router.use("/categories", categoryRoutes);
 router.use("/products", productRoutes);
 router.use("/points", pointRoutes);
