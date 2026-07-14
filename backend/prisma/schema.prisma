@@ -65,6 +65,16 @@ enum CashflowType {
   OUT
 }
 
+// 3 kantong cashflow (Pocket Cashflow / Profit First):
+// INVESTASI  = modal pemilik/investor, saldonya ditampilkan sebagai "Outstanding" (minus)
+// INVENTARIS = dana harga modal barang terjual, dipakai buat belanja stok/supplier
+// PROFIT     = keuntungan bersih, dipakai buat pengembangan usaha/bonus/dividen/dst
+enum CashflowPocket {
+  INVESTASI
+  INVENTARIS
+  PROFIT
+}
+
 enum PurchaseOrderStatus {
   DRAFT      // masih disusun, belum dikirim ke supplier
   ORDERED    // sudah dipesan ke supplier, menunggu barang datang
@@ -377,10 +387,14 @@ model Payment {
 model Cashflow {
   id            String       @id @default(cuid())
   type          CashflowType
-  category      String       // "Penjualan", "Belanja Supplier", "Gaji", dst
+  category      String       // "Penjualan", "Belanja Supplier", "Setor Modal", dst
   amount        Int
-  costAmount    Int?         // untuk entry Penjualan: porsi yang menutup modal (harga dasar produk)
-  profitAmount  Int?         // untuk entry Penjualan: porsi keuntungan bersih (bisa negatif kalau rugi karena diskon)
+  costAmount    Int?         // untuk entry Penjualan: porsi yang menutup modal (harga dasar produk) -> masuk Kantong Inventaris
+  profitAmount  Int?         // untuk entry Penjualan: porsi keuntungan bersih (bisa negatif kalau rugi karena diskon) -> masuk Kantong Profit
+  // Kantong tujuan transaksi ini (dipakai untuk entry NON-penjualan: setor modal,
+  // belanja supplier, bonus karyawan, dst). Entry Penjualan tidak perlu diisi ini
+  // karena otomatis kebagi 2 kantong sekaligus lewat costAmount & profitAmount.
+  pocket        CashflowPocket?
   description   String?
   pointId       String?
   refType       String?      // "ORDER", "EXPENSE", dst

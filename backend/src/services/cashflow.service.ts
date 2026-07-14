@@ -9,6 +9,8 @@ export async function recordCashflow(params: {
   amount: number;
   costAmount?: number;
   profitAmount?: number;
+  // Kantong tujuan (Investasi/Inventaris/Profit) — dipakai untuk entry NON-penjualan.
+  pocket?: "INVESTASI" | "INVENTARIS" | "PROFIT";
   description?: string;
   pointId?: string;
   refType?: string;

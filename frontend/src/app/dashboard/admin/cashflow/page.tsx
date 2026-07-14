@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, TrendingUp, TrendingDown, Wallet, PiggyBank, TriangleAlert } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, PiggyBank, TriangleAlert, Landmark, Boxes } from "lucide-react";
 import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -11,12 +11,27 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Cashflow, FulfillmentPoint } from "@/types";
+import { Cashflow, FulfillmentPoint, CashflowPocket } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
-interface CashflowSummary { cashIn: number; cashOut: number; netCash: number; totalModal: number; totalProfit: number; }
+interface CashflowSummary {
+  cashIn: number;
+  cashOut: number;
+  netCash: number;
+  totalModal: number;
+  totalProfit: number;
+  kantongInvestasi: number;
+  kantongInventaris: number;
+  kantongProfit: number;
+}
 
-const EMPTY_FORM = { type: "OUT" as "IN" | "OUT", category: "", amount: "", description: "" };
+const POCKET_LABEL: Record<CashflowPocket, string> = {
+  INVESTASI: "Investasi",
+  INVENTARIS: "Inventaris",
+  PROFIT: "Profit",
+};
+
+const EMPTY_FORM = { type: "OUT" as "IN" | "OUT", category: "", amount: "", description: "", pocket: "" as "" | CashflowPocket };
 
 function CashflowContent() {
   const { user } = useAuth();
@@ -54,6 +69,10 @@ function CashflowContent() {
       setError("Kategori dan jumlah wajib diisi");
       return;
     }
+    if (!form.pocket) {
+      setError("Kantong tujuan wajib dipilih");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -73,7 +92,7 @@ function CashflowContent() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Cashflow</h1>
-          <p className="text-sm text-ink/60">Modal & keuntungan dipisah otomatis dari tiap penjualan.</p>
+          <p className="text-sm text-ink/60">Sistem Kantong (Pocket Cashflow) — modal, keuntungan, dan investasi dipisah otomatis.</p>
         </div>
         <Button onClick={() => setShowForm((s) => !s)} className="!py-2 !px-4 text-sm">
           <Plus size={16} /> Catat Transaksi Manual
@@ -109,12 +128,17 @@ function CashflowContent() {
             Reset filter
           </button>
         )}
+        {!(from || to) && (
+          <p className="pb-2.5 text-xs text-ink/40">Saldo kantong di bawah ini kumulatif sejak awal (kosongkan filter tanggal).</p>
+        )}
       </div>
 
       {showForm && (
         <form onSubmit={handleSubmit} className="card mb-6 space-y-3">
           <h2 className="font-semibold">Transaksi Manual</h2>
-          <p className="text-xs text-ink/50">Untuk pengeluaran/pemasukan di luar penjualan otomatis, misalnya gaji, sewa, atau biaya operasional.</p>
+          <p className="text-xs text-ink/50">
+            Untuk transaksi di luar penjualan otomatis — misalnya setor modal, belanja stok non-PO, bonus karyawan, atau dividen. Pilih kantong tujuannya.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm font-medium">Tipe</label>
@@ -128,18 +152,40 @@ function CashflowContent() {
               </select>
             </div>
             <div>
+              <label className="mb-1 block text-sm font-medium">Kantong Tujuan *</label>
+              <select
+                value={form.pocket}
+                onChange={(e) => setForm({ ...form, pocket: e.target.value as "" | CashflowPocket })}
+                className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary"
+              >
+                <option value="">Pilih kantong</option>
+                <option value="INVESTASI">Investasi</option>
+                <option value="INVENTARIS">Inventaris</option>
+                <option value="PROFIT">Profit</option>
+              </select>
+            </div>
+            <div>
               <label className="mb-1 block text-sm font-medium">Kategori</label>
-              <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="Gaji, Sewa, dll" />
+              <Input
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                placeholder={form.pocket === "INVESTASI" ? "Setor Modal / Pengembalian Investasi" : "Gaji, Sewa, Belanja Stok, dll"}
+              />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">Jumlah (Rp)</label>
               <Input type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
             </div>
-            <div>
+            <div className="sm:col-span-2">
               <label className="mb-1 block text-sm font-medium">Keterangan</label>
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Opsional" />
             </div>
           </div>
+          {form.pocket === "INVESTASI" && (
+            <p className="rounded-lg bg-accent/60 p-2.5 text-xs text-ink/60">
+              Uang Masuk = setor modal (Outstanding Investasi makin minus). Uang Keluar = pengembalian investasi ke pemilik/investor (Outstanding mendekati nol).
+            </p>
+          )}
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <Button type="submit" disabled={saving} className="!py-2 !px-4 text-sm">
@@ -156,12 +202,6 @@ function CashflowContent() {
         <StatCard label="Uang Masuk" value={summary ? formatRupiah(summary.cashIn) : "..."} icon={<TrendingUp size={18} className="text-primary" />} />
         <StatCard label="Uang Keluar" value={summary ? formatRupiah(summary.cashOut) : "..."} icon={<TrendingDown size={18} className="text-red-500" />} />
         <StatCard label="Saldo Bersih" value={summary ? formatRupiah(summary.netCash) : "..."} icon={<Wallet size={18} />} />
-        <StatCard label="Modal Kembali" value={summary ? formatRupiah(summary.totalModal) : "..."} icon={<PiggyBank size={18} className="text-ink/60" />} />
-        <StatCard
-          label="Keuntungan Bersih"
-          value={summary ? formatRupiah(summary.totalProfit) : "..."}
-          icon={<TrendingUp size={18} className={summary && summary.totalProfit < 0 ? "text-red-600" : "text-primary"} />}
-        />
       </div>
 
       {summary && summary.totalProfit < 0 && (
@@ -170,6 +210,22 @@ function CashflowContent() {
           <p>Total keuntungan pada rentang ini <strong>negatif</strong> — diskon/voucher yang dipakai kemungkinan lebih besar dari margin produk. Cek daftar order yang bertanda "Di Bawah Modal" di Overview.</p>
         </div>
       )}
+
+      <div className="mt-6 mb-3">
+        <p className="font-semibold">Sistem Kantong (Pocket Cashflow)</p>
+        <p className="text-xs text-ink/50">Tiap penjualan otomatis kebagi 2 kantong: harga modal → Inventaris, keuntungan → Profit.</p>
+      </div>
+      <div className={`grid gap-4 ${isPusat ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+        {isPusat && (
+          <StatCard
+            label="Kantong Investasi (Outstanding)"
+            value={summary ? formatRupiah(summary.kantongInvestasi) : "..."}
+            icon={<Landmark size={18} className={summary && summary.kantongInvestasi < 0 ? "text-red-600" : "text-primary"} />}
+          />
+        )}
+        <StatCard label="Kantong Inventaris" value={summary ? formatRupiah(summary.kantongInventaris) : "..."} icon={<Boxes size={18} className="text-ink/60" />} />
+        <StatCard label="Kantong Profit" value={summary ? formatRupiah(summary.kantongProfit) : "..."} icon={<PiggyBank size={18} className="text-primary" />} />
+      </div>
 
       <div className="mt-6 card overflow-x-auto">
         <p className="mb-3 font-semibold">Riwayat Transaksi</p>
@@ -191,6 +247,7 @@ function CashflowContent() {
                 <th className="pb-2">Tanggal</th>
                 {isPusat && <th className="pb-2">Point</th>}
                 <th className="pb-2">Kategori</th>
+                <th className="pb-2">Kantong</th>
                 <th className="pb-2">Keterangan</th>
                 <th className="pb-2">Modal / Untung</th>
                 <th className="pb-2 text-right">Jumlah</th>
@@ -202,6 +259,9 @@ function CashflowContent() {
                   <td className="py-2 text-ink/60">{new Date(e.createdAt).toLocaleDateString("id-ID", { dateStyle: "medium" })}</td>
                   {isPusat && <td className="py-2 text-ink/60">{e.point?.name || "Pusat"}</td>}
                   <td className="py-2">{e.category}</td>
+                  <td className="py-2 text-xs text-ink/60">
+                    {e.pocket ? POCKET_LABEL[e.pocket] : e.category === "Penjualan" ? "Inventaris + Profit" : "-"}
+                  </td>
                   <td className="py-2 text-ink/60">{e.description || "-"}</td>
                   <td className="py-2 text-xs text-ink/60">
                     {e.costAmount != null && e.profitAmount != null ? (

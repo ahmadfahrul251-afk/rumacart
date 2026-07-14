@@ -134,16 +134,19 @@ export async function createOrder(input: CreateOrderInput) {
     timeout: 20000,
   });
 
-  // 7. Catat cashflow masuk dari penjualan ini. Uang yang benar-benar masuk tetap
-  //    `total` (akurat untuk hitung saldo kas), tapi kita pecah juga jadi porsi
-  //    "modal kembali" (costTotal) dan "keuntungan bersih" (sisanya, bisa negatif
-  //    kalau diskon voucher sampai menggerus modal) supaya kelihatan di laporan Cashflow.
+  // 7. Catat cashflow masuk dari penjualan ini (sistem "Kantong"/Pocket Cashflow).
+  //    Uang yang benar-benar masuk tetap `total` (akurat untuk hitung saldo kas
+  //    perusahaan), tapi otomatis kebagi 2 kantong sekaligus:
+  //    - costTotal (harga modal)  -> Kantong Inventaris (buat belanja stok/supplier)
+  //    - profitAmount (untung)    -> Kantong Profit (buat pengembangan usaha/bonus/dividen)
+  const profitAmount = total - costTotal;
+
   await recordCashflow({
     type: "IN",
     category: "Penjualan",
     amount: total,
     costAmount: costTotal,
-    profitAmount: total - costTotal,
+    profitAmount,
     description: `Order ${orderNumber}${belowCost ? " (di bawah modal!)" : ""}`,
     pointId,
     refType: "ORDER",

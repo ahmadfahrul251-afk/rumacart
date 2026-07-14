@@ -82,10 +82,13 @@ export async function receivePurchaseOrder(poId: string, userId: string) {
     timeout: 20000,
   });
 
+  // Belanja stok dari supplier dibayar dari Kantong Inventaris (dana hasil
+  // modal barang yang sudah terjual sebelumnya).
   await recordCashflow({
     type: "OUT",
     category: "Belanja Supplier",
     amount: po.totalAmount,
+    pocket: "INVENTARIS",
     description: `Terima barang PO ${po.poNumber}`,
     pointId: po.pointId,
     refType: "PURCHASE_ORDER",

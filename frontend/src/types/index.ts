@@ -116,6 +116,8 @@ export interface Order {
   statusHistory?: OrderStatusHistory[];
 }
 
+export type CashflowPocket = "INVESTASI" | "INVENTARIS" | "PROFIT";
+
 export interface Cashflow {
   id: string;
   type: "IN" | "OUT";
@@ -123,6 +125,7 @@ export interface Cashflow {
   amount: number;
   costAmount?: number | null;
   profitAmount?: number | null;
+  pocket?: CashflowPocket | null;
   description?: string | null;
   refType?: string | null;
   refId?: string | null;
