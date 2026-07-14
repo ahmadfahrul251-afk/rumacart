@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket, Users, ArrowRightLeft } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket, Users, ArrowRightLeft, Store } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
@@ -11,6 +11,7 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin/points", label: "Monitoring Point", icon: Store },
     { href: "/dashboard/admin/stock-transfers", label: "Transfer Stok", icon: ArrowRightLeft },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
@@ -24,6 +25,7 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin/products", label: "Produk", icon: Boxes },
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
+    { href: "/dashboard/admin/points", label: "Monitoring Point", icon: Store },
     { href: "/dashboard/admin/stock-transfers", label: "Transfer Stok", icon: ArrowRightLeft },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },

@@ -1,5 +1,5 @@
 import { prisma } from "../config/db";
-import { selectBestPoint, CartLine } from "./pointSelector.service";
+import { selectBestPoint, pointHasStockForCart, CartLine } from "./pointSelector.service";
 import { recordCashflow } from "./cashflow.service";
 import { calcVoucherDiscount } from "./voucher.service";
 
@@ -11,6 +11,10 @@ interface CreateOrderInput {
   paymentMethod: "COD" | "TRANSFER" | "EWALLET";
   voucherCode?: string;
   notes?: string;
+  // Opsional: customer pilih sendiri Point-nya di halaman checkout (dari daftar
+  // /points/eligible). Kalau kosong, sistem tetap otomatis pilih Point terdekat
+  // yang stoknya cukup (perilaku lama, dipakai juga sebagai fallback).
+  pointId?: string;
 }
 
 const SHIPPING_COST: Record<string, number> = {
@@ -41,8 +45,21 @@ export async function createOrder(input: CreateOrderInput) {
     }
   }
 
-  // 3. FITUR UTAMA: pilih Point terdekat yang stoknya cukup.
-  const pointId = await selectBestPoint(input.items, lat, lon, city);
+  // 3. Tentukan Point pemenuhan pesanan.
+  //    Kalau customer sudah pilih sendiri (dari dropdown Point di checkout),
+  //    pakai itu — tapi tetap divalidasi ulang stoknya di sini (jangan percaya
+  //    begitu saja data dari client, bisa saja sudah berubah/kehabisan).
+  //    Kalau tidak pilih, sistem otomatis cari Point terdekat yang stoknya cukup.
+  let pointId: string;
+  if (input.pointId) {
+    const stillHasStock = await pointHasStockForCart(input.pointId, input.items);
+    if (!stillHasStock) {
+      throw new Error("Stok di Point yang dipilih sudah tidak mencukupi, silakan pilih Point lain");
+    }
+    pointId = input.pointId;
+  } else {
+    pointId = await selectBestPoint(input.items, lat, lon, city);
+  }
 
   // 4. Hitung subtotal berdasarkan harga di database (bukan dari client).
   //    Sekaligus hitung total harga modal (costPrice) supaya bisa dipisahkan

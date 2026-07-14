@@ -21,7 +21,10 @@ function AdminProductsContent() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [claimingId, setClaimingId] = useState("");
+  const [claimFilter, setClaimFilter] = useState<"ALL" | "UNCLAIMED" | "CLAIMED">("ALL");
+  const [claimRowId, setClaimRowId] = useState(""); // baris yang lagi buka form klaim
+  const [claimQty, setClaimQty] = useState("");
+  const [claiming, setClaiming] = useState(false);
   const [error, setError] = useState("");
 
   function loadProducts() {
@@ -39,16 +42,32 @@ function AdminProductsContent() {
 
   useEffect(loadProducts, [search, page]);
 
+  function myInventoryOf(p: Product) {
+    return isAdminPoint ? p.inventory?.find((inv) => inv.pointId === user?.managedPointId) : undefined;
+  }
+
+  const visibleProducts =
+    isAdminPoint && claimFilter !== "ALL"
+      ? products?.filter((p) => (claimFilter === "CLAIMED" ? !!myInventoryOf(p) : !myInventoryOf(p)))
+      : products;
+
+  function openClaimForm(productId: string) {
+    setError("");
+    setClaimRowId(productId);
+    setClaimQty("");
+  }
+
   async function handleClaim(productId: string) {
     setError("");
-    setClaimingId(productId);
+    setClaiming(true);
     try {
-      await api.post("/inventory/claim", { productId });
+      await api.post("/inventory/claim", { productId, qty: claimQty ? Number(claimQty) : undefined });
+      setClaimRowId("");
       loadProducts();
     } catch (err: any) {
       setError(err.message);
     } finally {
-      setClaimingId("");
+      setClaiming(false);
     }
   }
 
@@ -68,20 +87,41 @@ function AdminProductsContent() {
       {isAdminPoint && (
         <p className="mb-4 text-sm text-ink/50">
           Produk diinput terpusat oleh Admin Pusat. Klik <strong>Klaim</strong> supaya produk masuk ke inventaris
-          Point kamu, baru bisa diisi stoknya lewat Transfer Stok atau Purchase Order.
+          Point kamu — boleh langsung isi stok awal, atau nanti diisi lewat Transfer Stok / Purchase Order.
         </p>
       )}
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
 
-      <Input
-        placeholder="Cari produk..."
-        value={search}
-        onChange={(e) => {
-          setPage(1);
-          setSearch(e.target.value);
-        }}
-        className="mb-4 max-w-xs"
-      />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <Input
+          placeholder="Cari produk..."
+          value={search}
+          onChange={(e) => {
+            setPage(1);
+            setSearch(e.target.value);
+          }}
+          className="max-w-xs"
+        />
+        {isAdminPoint && (
+          <div className="flex gap-1.5">
+            {[
+              { value: "ALL", label: "Semua" },
+              { value: "UNCLAIMED", label: "Belum diklaim" },
+              { value: "CLAIMED", label: "Sudah diklaim" },
+            ].map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => setClaimFilter(tab.value as typeof claimFilter)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
+                  claimFilter === tab.value ? "bg-primary text-white" : "bg-accent text-ink/70 hover:bg-primary-light"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
@@ -102,10 +142,9 @@ function AdminProductsContent() {
                   <td colSpan={6} className="py-2"><Skeleton className="h-10 w-full" /></td>
                 </tr>
               ))}
-            {products?.map((p) => {
-              const myInventory = isAdminPoint
-                ? p.inventory?.find((inv) => inv.pointId === user?.managedPointId)
-                : undefined;
+            {visibleProducts?.map((p) => {
+              const myInventory = myInventoryOf(p);
+              const isClaimingThis = claimRowId === p.id;
               return (
                 <tr key={p.id} className="border-t border-black/5">
                   <td className="py-2">
@@ -128,14 +167,37 @@ function AdminProductsContent() {
                         <span className="inline-flex items-center gap-1 rounded-lg bg-primary-light px-3 py-1.5 text-xs font-medium text-primary">
                           <PackageCheck size={13} /> Sudah diklaim
                         </span>
+                      ) : isClaimingThis ? (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="Stok awal"
+                            value={claimQty}
+                            onChange={(e) => setClaimQty(e.target.value)}
+                            className="!w-24 !py-1.5 text-xs"
+                          />
+                          <button
+                            onClick={() => handleClaim(p.id)}
+                            disabled={claiming}
+                            className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                          >
+                            {claiming ? <Loader2 size={13} className="animate-spin" /> : "Konfirmasi"}
+                          </button>
+                          <button
+                            onClick={() => setClaimRowId("")}
+                            disabled={claiming}
+                            className="rounded-lg px-2 py-1.5 text-xs text-ink/50 hover:bg-accent"
+                          >
+                            Batal
+                          </button>
+                        </div>
                       ) : (
                         <button
-                          onClick={() => handleClaim(p.id)}
-                          disabled={claimingId === p.id}
-                          className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-primary-light hover:text-primary disabled:opacity-50"
+                          onClick={() => openClaimForm(p.id)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-primary-light hover:text-primary"
                         >
-                          {claimingId === p.id ? <Loader2 size={13} className="animate-spin" /> : <PackageCheck size={13} />}
-                          Klaim
+                          <PackageCheck size={13} /> Klaim
                         </button>
                       )
                     ) : (
@@ -150,6 +212,13 @@ function AdminProductsContent() {
                 </tr>
               );
             })}
+            {visibleProducts?.length === 0 && products && products.length > 0 && (
+              <tr>
+                <td colSpan={6} className="py-6 text-center text-sm text-ink/40">
+                  Tidak ada produk di filter ini.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

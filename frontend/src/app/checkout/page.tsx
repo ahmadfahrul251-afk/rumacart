@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { api } from "@/lib/api";
-import { Address, Order, Voucher } from "@/types";
+import { Address, Order, Voucher, EligiblePoint } from "@/types";
 import { formatRupiah } from "@/lib/utils";
-import { Tag, X } from "lucide-react";
+import { Tag, X, MapPin } from "lucide-react";
 
 const SHIPPING_OPTIONS = [
   { value: "PICKUP", label: "Pickup di Point", cost: 0 },
@@ -37,6 +37,9 @@ export default function CheckoutPage() {
 
   const [shippingMethod, setShippingMethod] = useState("PICKUP");
   const [paymentMethod, setPaymentMethod] = useState("COD");
+  const [eligiblePoints, setEligiblePoints] = useState<EligiblePoint[] | null>(null);
+  const [pointId, setPointId] = useState("");
+  const [pointsError, setPointsError] = useState("");
   const [voucherCode, setVoucherCode] = useState("");
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
   const [voucherChecking, setVoucherChecking] = useState(false);
@@ -58,6 +61,30 @@ export default function CheckoutPage() {
       else setShowNewAddress(true);
     });
   }, [user]);
+
+  // Cari daftar Point yang stoknya cukup untuk keranjang ini, diurutkan dari
+  // yang terdekat dengan alamat terpilih. Customer bisa ganti manual di bawah;
+  // Point paling atas (tersedia) otomatis jadi pilihan awal.
+  const itemsKey = items.map((i) => `${i.productId}:${i.qty}`).join(",");
+  useEffect(() => {
+    if (items.length === 0) return;
+    setEligiblePoints(null);
+    setPointsError("");
+    api
+      .post<EligiblePoint[]>("/points/eligible", {
+        items: items.map((i) => ({ productId: i.productId, qty: i.qty })),
+        addressId: !showNewAddress && addressId ? addressId : undefined,
+      })
+      .then((res) => {
+        setEligiblePoints(res);
+        setPointId((prev) => (res.some((p) => p.pointId === prev) ? prev : res[0]?.pointId || ""));
+      })
+      .catch((err: any) => {
+        setEligiblePoints([]);
+        setPointsError(err.message);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsKey, addressId, showNewAddress]);
 
   const shippingCost = SHIPPING_OPTIONS.find((s) => s.value === shippingMethod)?.cost ?? 0;
   const discount = appliedVoucher?.discount ?? 0;
@@ -86,6 +113,10 @@ export default function CheckoutPage() {
 
   async function handleCheckout() {
     setError("");
+    if (!pointId) {
+      setError("Pilih Point tempat belanja dulu");
+      return;
+    }
     setSubmitting(true);
     try {
       let finalAddressId = addressId;
@@ -101,6 +132,7 @@ export default function CheckoutPage() {
         paymentMethod,
         voucherCode: appliedVoucher ? appliedVoucher.code : undefined,
         notes,
+        pointId,
       });
 
       clearCart();
@@ -159,6 +191,39 @@ export default function CheckoutPage() {
                   {addresses.length > 0 && (
                     <button onClick={() => setShowNewAddress(false)} className="text-sm text-ink/60">Batal, pilih alamat tersimpan</button>
                   )}
+                </div>
+              )}
+            </section>
+
+            <section className="card">
+              <p className="mb-3 font-semibold">Pilih Point Belanja</p>
+              <p className="mb-3 text-xs text-ink/50">
+                Pesananmu akan dipenuhi dari Point yang kamu pilih. Cuma Point yang stoknya cukup untuk semua item di
+                keranjang yang muncul di sini, diurutkan dari yang terdekat dengan alamatmu.
+              </p>
+              {eligiblePoints === null && <p className="text-sm text-ink/50">Mencari Point yang tersedia...</p>}
+              {eligiblePoints?.length === 0 && (
+                <p className="rounded-xl bg-red-50 p-3 text-sm text-red-600">
+                  {pointsError || "Tidak ada Point dengan stok mencukupi untuk pesanan ini. Coba kurangi jumlah item di keranjang."}
+                </p>
+              )}
+              {eligiblePoints && eligiblePoints.length > 0 && (
+                <div className="space-y-2">
+                  {eligiblePoints.map((p) => (
+                    <label
+                      key={p.pointId}
+                      className="flex cursor-pointer items-start gap-2 rounded-xl border border-black/10 p-3 has-[:checked]:border-primary has-[:checked]:bg-primary-light"
+                    >
+                      <input type="radio" name="point" checked={pointId === p.pointId} onChange={() => setPointId(p.pointId)} className="mt-1" />
+                      <div className="flex-1 text-sm">
+                        <p className="font-medium">{p.name}</p>
+                        <p className="flex items-center gap-1 text-ink/60">
+                          <MapPin size={12} /> {p.city}
+                          {p.distance != null && <span> · {p.distance.toFixed(1)} km</span>}
+                        </p>
+                      </div>
+                    </label>
+                  ))}
                 </div>
               )}
             </section>
@@ -251,7 +316,7 @@ export default function CheckoutPage() {
             <hr className="border-black/5" />
             <div className="flex justify-between font-semibold"><span>Total</span><span>{formatRupiah(total)}</span></div>
             {error && <p className="text-sm text-red-600">{error}</p>}
-            <Button onClick={handleCheckout} disabled={submitting} className="w-full">
+            <Button onClick={handleCheckout} disabled={submitting || !pointId} className="w-full">
               {submitting ? "Memproses..." : "Buat Pesanan"}
             </Button>
           </div>

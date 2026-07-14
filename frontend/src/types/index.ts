@@ -58,6 +58,29 @@ export interface FulfillmentPoint {
   longitude: number;
 }
 
+export interface EligiblePoint {
+  pointId: string;
+  name: string;
+  code: string;
+  city: string;
+  distance: number | null;
+}
+
+export interface PointMonitoring {
+  id: string;
+  name: string;
+  code: string;
+  city: string;
+  isActive: boolean;
+  claimedProducts: number;
+  totalStockQty: number;
+  stockValue: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  orderCount: number;
+  revenue: number;
+}
+
 export interface Address {
   id: string;
   label: string;

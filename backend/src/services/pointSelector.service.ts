@@ -6,27 +6,37 @@ export interface CartLine {
   qty: number;
 }
 
-interface PointCandidate {
+export interface EligiblePoint {
   pointId: string;
+  name: string;
+  code: string;
+  city: string;
   distance: number | null;
 }
 
-// INI FITUR UTAMA RUMACART: memilih Fulfillment Point yang
-//  1) punya stok cukup untuk SEMUA item di keranjang, dan
-//  2) paling dekat dengan alamat customer (kalau lat/long tersedia).
-//
-// Kalau alamat tidak punya koordinat, fallback: cocokkan nama kota,
-// lalu kalau masih tidak ada, pilih Point dengan total stok terbanyak.
-export async function selectBestPoint(
+// Cek 1 Point tertentu punya stok cukup untuk SEMUA item di keranjang.
+export async function pointHasStockForCart(pointId: string, cart: CartLine[]): Promise<boolean> {
+  for (const line of cart) {
+    const inv = await prisma.inventory.findUnique({
+      where: { productId_pointId: { productId: line.productId, pointId } },
+    });
+    if (!inv || inv.stock < line.qty) return false;
+  }
+  return true;
+}
+
+// Daftar semua Point yang stoknya cukup untuk keranjang ini, diurutkan dari
+// yang paling dekat (kalau ada koordinat customer). Dipakai untuk:
+//  1) checkout customer memilih sendiri Point-nya (GET/POST /points/eligible)
+//  2) fallback otomatis di selectBestPoint kalau customer tidak memilih.
+export async function listEligiblePoints(
   cart: CartLine[],
   customerLat?: number | null,
   customerLon?: number | null,
   customerCity?: string | null
-) {
+): Promise<EligiblePoint[]> {
   const points = await prisma.fulfillmentPoint.findMany({ where: { isActive: true } });
-  if (points.length === 0) throw new Error("Belum ada Fulfillment Point aktif");
-
-  const eligible: PointCandidate[] = [];
+  const eligible: EligiblePoint[] = [];
 
   for (const point of points) {
     const hasStockForAll = await pointHasStockForCart(point.id, cart);
@@ -37,38 +47,39 @@ export async function selectBestPoint(
         ? distanceKm(customerLat, customerLon, point.latitude, point.longitude)
         : null;
 
-    eligible.push({ pointId: point.id, distance });
+    eligible.push({ pointId: point.id, name: point.name, code: point.code, city: point.city, distance });
   }
 
+  const withDistance = eligible.filter((p) => p.distance != null);
+  const withoutDistance = eligible.filter((p) => p.distance == null);
+
+  if (withDistance.length > 0) {
+    withDistance.sort((a, b) => (a.distance as number) - (b.distance as number));
+    return [...withDistance, ...withoutDistance];
+  }
+
+  // Tidak ada koordinat: kalau kota customer cocok, taruh di depan.
+  if (customerCity) {
+    withoutDistance.sort((a, b) => {
+      const aMatch = a.city.toLowerCase() === customerCity.toLowerCase() ? 0 : 1;
+      const bMatch = b.city.toLowerCase() === customerCity.toLowerCase() ? 0 : 1;
+      return aMatch - bMatch;
+    });
+  }
+  return withoutDistance;
+}
+
+// INI FITUR UTAMA RUMACART (fallback otomatis): kalau customer tidak memilih
+// Point sendiri, sistem pilih Point terdekat/tercocok yang stoknya cukup.
+export async function selectBestPoint(
+  cart: CartLine[],
+  customerLat?: number | null,
+  customerLon?: number | null,
+  customerCity?: string | null
+) {
+  const eligible = await listEligiblePoints(cart, customerLat, customerLon, customerCity);
   if (eligible.length === 0) {
     throw new Error("Tidak ada Point dengan stok mencukupi untuk pesanan ini");
   }
-
-  // Kalau ada koordinat, urutkan berdasarkan jarak terdekat.
-  const withDistance = eligible.filter((p) => p.distance != null);
-  if (withDistance.length > 0) {
-    withDistance.sort((a, b) => (a.distance as number) - (b.distance as number));
-    return withDistance[0].pointId;
-  }
-
-  // Fallback: cocokkan kota.
-  if (customerCity) {
-    const cityMatch = points.find(
-      (p: any) => eligible.some((e) => e.pointId === p.id) && p.city.toLowerCase() === customerCity!.toLowerCase()
-    );
-    if (cityMatch) return cityMatch.id;
-  }
-
-  // Fallback terakhir: Point pertama yang eligible.
   return eligible[0].pointId;
-}
-
-async function pointHasStockForCart(pointId: string, cart: CartLine[]): Promise<boolean> {
-  for (const line of cart) {
-    const inv = await prisma.inventory.findUnique({
-      where: { productId_pointId: { productId: line.productId, pointId } },
-    });
-    if (!inv || inv.stock < line.qty) return false;
-  }
-  return true;
 }

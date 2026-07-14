@@ -136,14 +136,15 @@ export async function adjustment(req: Request, res: Response) {
   return ok(res, inventory, "Stok disesuaikan");
 }
 
-// POST /api/inventory/claim  { productId, pointId? }
+// POST /api/inventory/claim  { productId, pointId?, qty? }
 // Produk selalu diinput terpusat oleh Admin Pusat (lihat product.routes.ts).
 // Tiap Point "mengklaim" produk yang mau mereka jual — ini yang bikin produk
-// itu resmi jadi bagian inventaris Point tersebut (baris Inventory dibuat
-// dengan stok 0), baru setelah itu stoknya diisi lewat Transfer Stok atau
-// Purchase Order ke supplier. Klaim yang sudah ada tidak dianggap error.
+// itu resmi jadi bagian inventaris Point tersebut. `qty` opsional: kalau diisi,
+// langsung jadi stok awal (tercatat di riwayat inventory); kalau tidak, klaim
+// dulu dengan stok 0 dan diisi belakangan lewat Transfer Stok / Purchase Order.
+// Klaim yang sudah ada tidak dianggap error.
 export async function claimProduct(req: Request, res: Response) {
-  const { productId } = req.body;
+  const { productId, qty } = req.body;
   if (!productId) return fail(res, "Produk wajib dipilih", 422);
   const pointId = resolveWritePointId(req, req.body.pointId);
   if (!pointId) return fail(res, "Point tujuan wajib diisi", 422);
@@ -156,10 +157,24 @@ export async function claimProduct(req: Request, res: Response) {
   });
   if (existing) return ok(res, existing, "Produk ini sudah ada di inventaris Point kamu");
 
+  const initialStock = Math.max(Number(qty) || 0, 0);
   const inventory = await prisma.inventory.create({
-    data: { productId, pointId, stock: 0, minStock: product.minStock },
+    data: { productId, pointId, stock: initialStock, minStock: product.minStock },
     include: { product: true },
   });
+
+  if (initialStock > 0) {
+    await prisma.inventoryHistory.create({
+      data: {
+        inventoryId: inventory.id,
+        type: "STOCK_IN",
+        qty: initialStock,
+        note: "Stok awal saat klaim produk",
+        createdById: req.user?.userId,
+      },
+    });
+  }
+
   return ok(res, inventory, "Produk berhasil diklaim, sekarang jadi bagian inventaris Point kamu", 201);
 }
 

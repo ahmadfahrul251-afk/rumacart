@@ -18,7 +18,7 @@ const STATUS_LABEL: Record<string, string> = {
 // POST /api/orders — checkout
 export async function checkout(req: Request, res: Response) {
   try {
-    const { addressId, items, shippingMethod, paymentMethod, voucherCode, notes } = req.body;
+    const { addressId, items, shippingMethod, paymentMethod, voucherCode, notes, pointId } = req.body;
     if (!items || !items.length) return fail(res, "Keranjang kosong", 422);
 
     const order = await createOrder({
@@ -29,6 +29,7 @@ export async function checkout(req: Request, res: Response) {
       paymentMethod: paymentMethod || "COD",
       voucherCode,
       notes,
+      pointId,
     });
     return ok(res, order, "Order berhasil dibuat", 201);
   } catch (err: any) {
