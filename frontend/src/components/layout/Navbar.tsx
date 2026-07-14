@@ -52,6 +52,7 @@ export function Navbar() {
 
         <nav className="hidden items-center gap-6 text-sm font-medium md:flex">
           <Link href="/products" className="hover:text-primary">Belanja</Link>
+          <Link href="/points" className="hover:text-primary">Point Terdekat</Link>
           <Link href="/orders" className="hover:text-primary">Pesanan Saya</Link>
         </nav>
 
@@ -107,6 +108,7 @@ export function Navbar() {
           </form>
           <nav className="flex flex-col gap-3 text-sm font-medium">
             <Link href="/products" onClick={() => setOpen(false)}>Belanja</Link>
+            <Link href="/points" onClick={() => setOpen(false)}>Point Terdekat</Link>
             <Link href="/orders" onClick={() => setOpen(false)}>Pesanan Saya</Link>
             <Link href="/profile" onClick={() => setOpen(false)}>Profil</Link>
             {isStaff && (

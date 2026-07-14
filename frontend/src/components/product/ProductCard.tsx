@@ -12,7 +12,15 @@ import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
 import { PointPickerModal } from "./PointPickerModal";
 
-export function ProductCard({ product }: { product: Product }) {
+interface Props {
+  product: Product;
+  // Kalau diisi (dipanggil dari halaman detail Point, lihat app/points/[id]/page.tsx),
+  // "Beli Sekarang" LANGSUNG masuk keranjang Point ini, tanpa buka PointPickerModal —
+  // soalnya customer memang lagi browsing di dalam konteks Point tersebut.
+  fixedPoint?: { pointId: string; name: string; code: string };
+}
+
+export function ProductCard({ product, fixedPoint }: Props) {
   const { addItem } = useCart();
   const { addItem: addPlanned } = usePlannedCart();
   const { user } = useAuth();
@@ -83,7 +91,22 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="mt-2 flex items-center gap-1.5">
           <button
             disabled={outOfStock}
-            onClick={() => setShowPicker(true)}
+            onClick={() => {
+              if (fixedPoint) {
+                addItem({
+                  productId: product.id,
+                  name: product.name,
+                  price,
+                  image: product.images?.[0],
+                  qty: 1,
+                  pointId: fixedPoint.pointId,
+                  pointName: fixedPoint.name,
+                  pointCode: fixedPoint.code,
+                });
+              } else {
+                setShowPicker(true);
+              }
+            }}
             className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-light py-2 text-xs font-medium text-primary transition hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ShoppingCart size={14} /> Beli Sekarang

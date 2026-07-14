@@ -91,11 +91,18 @@ function AdminDashboardContent() {
                 <td className="py-2">{formatRupiah(o.total)}</td>
                 <td className="py-2"><Badge tone={o.status}>{o.status}</Badge></td>
                 <td className="py-2">
-                  {o.belowCost && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
-                      <TriangleAlert size={11} /> Di Bawah Modal
-                    </span>
-                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {o.belowCost && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+                        <TriangleAlert size={11} /> Di Bawah Modal
+                      </span>
+                    )}
+                    {o.isBackOrder && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-700">
+                        Back Order
+                      </span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

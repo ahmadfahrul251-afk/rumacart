@@ -238,7 +238,7 @@ async function main() {
       pointId: point.id,
       addressId: address?.id,
       status: status as any,
-      shippingMethod: pick(["PICKUP", "INSTANT", "SAME_DAY"]) as any,
+      shippingMethod: pick(["PICKUP", "DELIVERY"]) as any,
       paymentMethod: pick(["COD", "TRANSFER", "EWALLET"]) as any,
       subtotal,
       shippingCost,

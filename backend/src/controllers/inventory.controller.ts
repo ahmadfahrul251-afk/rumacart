@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/db";
 import { ok, fail } from "../utils/response";
-import { scopedPointId, resolveWritePointId } from "../utils/pointScope";
+import { scopedPointId, resolveWritePointId, canAccessPoint } from "../utils/pointScope";
+import { checkAndCreateRestockRequest } from "../services/restockRequest.service";
 
 // GET /api/inventory?pointId=xxx — daftar stok produk di satu Point (atau semua).
 // Admin Point otomatis terkunci ke Point-nya sendiri, tidak peduli query yang dikirim.
@@ -68,6 +69,7 @@ export async function stockOut(req: Request, res: Response) {
   await prisma.inventoryHistory.create({
     data: { inventoryId: inventory.id, type: "STOCK_OUT", qty, note, createdById: req.user?.userId },
   });
+  await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
   return ok(res, inventory, "Stok keluar dicatat");
 }
 
@@ -102,6 +104,7 @@ export async function transferStock(req: Request, res: Response) {
       { inventoryId: toInv.id, type: "TRANSFER_IN", qty, note, createdById: req.user?.userId },
     ],
   });
+  await checkAndCreateRestockRequest(productId, fromPointId).catch(() => {});
 
   return ok(res, { fromInv, toInv }, "Transfer stok berhasil");
 }
@@ -133,6 +136,7 @@ export async function adjustment(req: Request, res: Response) {
       createdById: req.user?.userId,
     },
   });
+  if (diff < 0) await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
   return ok(res, inventory, "Stok disesuaikan");
 }
 
@@ -176,6 +180,91 @@ export async function claimProduct(req: Request, res: Response) {
   }
 
   return ok(res, inventory, "Produk berhasil diklaim, sekarang jadi bagian inventaris Point kamu", 201);
+}
+
+// PATCH /api/inventory/:id/thresholds  { minStock?, maxStock?, safetyStock? }
+// Atur ambang batas stok 1 baris inventaris — dipakai Smart Restock (auto Restock
+// Request muncul begitu stock <= minStock, jumlah yang diminta menuju maxStock).
+export async function updateThresholds(req: Request, res: Response) {
+  const { id } = req.params;
+  const existing = await prisma.inventory.findUnique({ where: { id } });
+  if (!existing) return fail(res, "Data inventaris tidak ditemukan", 404);
+  if (!canAccessPoint(req, existing.pointId)) return fail(res, "Inventaris ini bukan milik lokasi kamu", 403);
+
+  const { minStock, maxStock, safetyStock } = req.body;
+  const data: any = {};
+  if (minStock != null) data.minStock = Number(minStock);
+  if (maxStock !== undefined) data.maxStock = maxStock === null ? null : Number(maxStock);
+  if (safetyStock !== undefined) data.safetyStock = safetyStock === null ? null : Number(safetyStock);
+
+  const inventory = await prisma.inventory.update({ where: { id }, data, include: { product: true } });
+  return ok(res, inventory, "Ambang batas stok diperbarui");
+}
+
+// POST /api/inventory/return  { productId, pointId?, qty, note }
+// Barang kembali dari customer/lokasi lain — stok BERTAMBAH.
+export async function stockReturn(req: Request, res: Response) {
+  const { productId, qty, note } = req.body;
+  const pointId = resolveWritePointId(req, req.body.pointId);
+  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+
+  const inventory = await upsertInventory(productId, pointId, qty);
+  await prisma.inventoryHistory.create({
+    data: { inventoryId: inventory.id, type: "RETURN", qty, note, createdById: req.user?.userId },
+  });
+  return ok(res, inventory, "Retur barang dicatat, stok bertambah");
+}
+
+// POST /api/inventory/damage  { productId, pointId?, qty, note }
+// Barang rusak — stok BERKURANG, tidak bisa dijual lagi.
+export async function stockDamage(req: Request, res: Response) {
+  const { productId, qty, note } = req.body;
+  const pointId = resolveWritePointId(req, req.body.pointId);
+  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+
+  const existing = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
+  if (!existing || existing.stock < qty) return fail(res, "Stok tidak cukup", 400);
+
+  const inventory = await upsertInventory(productId, pointId, -qty);
+  await prisma.inventoryHistory.create({
+    data: { inventoryId: inventory.id, type: "DAMAGE", qty, note, createdById: req.user?.userId },
+  });
+  await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
+  return ok(res, inventory, "Barang rusak dicatat, stok berkurang");
+}
+
+// POST /api/inventory/expired  { productId, pointId?, qty, note }
+// Barang kadaluarsa — stok BERKURANG, tidak bisa dijual lagi.
+export async function stockExpired(req: Request, res: Response) {
+  const { productId, qty, note } = req.body;
+  const pointId = resolveWritePointId(req, req.body.pointId);
+  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+
+  const existing = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
+  if (!existing || existing.stock < qty) return fail(res, "Stok tidak cukup", 400);
+
+  const inventory = await upsertInventory(productId, pointId, -qty);
+  await prisma.inventoryHistory.create({
+    data: { inventoryId: inventory.id, type: "EXPIRED", qty, note, createdById: req.user?.userId },
+  });
+  await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
+  return ok(res, inventory, "Barang kadaluarsa dicatat, stok berkurang");
+}
+
+// GET /api/inventory/:id/history — riwayat pergerakan stok 1 baris inventaris
+export async function getInventoryHistory(req: Request, res: Response) {
+  const { id } = req.params;
+  const inventory = await prisma.inventory.findUnique({ where: { id } });
+  if (!inventory) return fail(res, "Data inventaris tidak ditemukan", 404);
+  if (!canAccessPoint(req, inventory.pointId)) return fail(res, "Inventaris ini bukan milik lokasi kamu", 403);
+
+  const history = await prisma.inventoryHistory.findMany({
+    where: { inventoryId: id },
+    include: { createdBy: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return ok(res, history);
 }
 
 async function upsertInventory(productId: string, pointId: string, delta: number) {

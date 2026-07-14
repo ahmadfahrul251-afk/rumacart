@@ -170,11 +170,55 @@ export interface Address {
   recipientName: string;
   phone: string;
   fullAddress: string;
+  kecamatan?: string | null; // dipakai cocokkan jangkauan pengiriman (DeliveryArea) tiap Point
   city: string;
   province: string;
   latitude?: number | null;
   longitude?: number | null;
   isDefault: boolean;
+}
+
+// Area jangkauan kurir 1 Point (per kecamatan) + biayanya — diatur Admin
+// Lokasi/Admin Pusat, dipakai buat tentuin opsi & biaya DELIVERY saat checkout.
+export interface DeliveryArea {
+  id: string;
+  pointId: string;
+  kecamatan: string;
+  city: string;
+  cost: number;
+  isActive: boolean;
+  createdAt: string;
+  point?: { id: string; name: string; code: string; city: string };
+}
+
+export interface DeliveryQuote {
+  available: boolean;
+  cost: number;
+}
+
+// Dipakai halaman "Semua Point" & detail Point customer.
+export interface NearbyPoint {
+  id: string;
+  name: string;
+  code: string;
+  type: LocationType;
+  city: string;
+  address: string;
+  distance: number | null;
+}
+
+export interface PointPublic {
+  id: string;
+  name: string;
+  code: string;
+  type: LocationType;
+  city: string;
+  address: string;
+  phone?: string | null;
+  operatingHours?: string | null;
+  isActive: boolean;
+  latitude: number;
+  longitude: number;
 }
 
 export type OrderStatus =

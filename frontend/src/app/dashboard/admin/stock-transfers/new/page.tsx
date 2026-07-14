@@ -18,9 +18,12 @@ interface ItemRow {
 
 function NewStockTransferContent() {
   const router = useRouter();
+  const { user } = useAuth();
+  const isAdminLokasi = user?.role === "ADMIN_POINT";
   const [points, setPoints] = useState<FulfillmentPoint[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
+  const [fromPointId, setFromPointId] = useState("");
   const [toPointId, setToPointId] = useState("");
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<ItemRow[]>([{ productId: "", qty: 1 }]);
@@ -34,6 +37,10 @@ function NewStockTransferContent() {
       .then((res) => setProducts(res.items))
       .catch(() => setProducts([]));
   }, []);
+
+  useEffect(() => {
+    if (isAdminLokasi && user?.managedPointId) setFromPointId(user.managedPointId);
+  }, [isAdminLokasi, user?.managedPointId]);
 
   function updateItem(index: number, patch: Partial<ItemRow>) {
     setItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -51,7 +58,11 @@ function NewStockTransferContent() {
     e.preventDefault();
     setError("");
     if (!toPointId) {
-      setError("Point tujuan wajib dipilih");
+      setError("Lokasi tujuan wajib dipilih");
+      return;
+    }
+    if (fromPointId && fromPointId === toPointId) {
+      setError("Lokasi asal dan tujuan tidak boleh sama");
       return;
     }
     const validItems = items.filter((row) => row.productId && row.qty > 0);
@@ -62,6 +73,7 @@ function NewStockTransferContent() {
     setSaving(true);
     try {
       const transfer = await api.post<{ id: string }>("/stock-transfers", {
+        fromPointId: fromPointId || undefined,
         toPointId,
         notes,
         items: validItems,
@@ -77,24 +89,46 @@ function NewStockTransferContent() {
   return (
     <div className="flex-1 p-6">
       <h1 className="mb-1 text-2xl font-bold">Kirim Transfer Stok</h1>
-      <p className="mb-6 text-sm text-ink/60">Pusat berperan sebagai supplier internal — kirim stok ke 1 Point.</p>
+      <p className="mb-6 text-sm text-ink/60">Pindahkan stok antar lokasi — RDH ke Mart/Point, Mart ke Point, dst.</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="card grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium">Point Tujuan *</label>
+            <label className="mb-1 block text-sm font-medium">Lokasi Asal {isAdminLokasi ? "" : "(opsional)"}</label>
+            {isAdminLokasi ? (
+              <p className="rounded-xl border border-black/10 bg-accent/50 px-4 py-2.5 text-sm">
+                {user?.managedPoint?.name || "Lokasi kamu"}
+              </p>
+            ) : (
+              <>
+                <select
+                  value={fromPointId}
+                  onChange={(e) => setFromPointId(e.target.value)}
+                  className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Dari Pusat (mode lama, stok sumber tidak dipotong)</option>
+                  {points.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-ink/40">Kosongkan cuma kalau memang belum ada lokasi sumber yang jelas.</p>
+              </>
+            )}
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Lokasi Tujuan *</label>
             <select
               value={toPointId}
               onChange={(e) => setToPointId(e.target.value)}
               className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             >
-              <option value="">Pilih point</option>
+              <option value="">Pilih lokasi tujuan</option>
               {points.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
               ))}
             </select>
           </div>
-          <div>
+          <div className="sm:col-span-2">
             <label className="mb-1 block text-sm font-medium">Catatan</label>
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Opsional" />
           </div>
@@ -160,7 +194,7 @@ function NewStockTransferContent() {
 export default function NewStockTransferPage() {
   const { user } = useAuth();
   return (
-    <RoleGuard allow={["ADMIN", "SUPER_ADMIN"]}>
+    <RoleGuard allow={["ADMIN", "SUPER_ADMIN", "ADMIN_POINT"]}>
       <div className="flex min-h-screen bg-background">
         <DashboardSidebar role={user?.role || "ADMIN"} />
         <NewStockTransferContent />

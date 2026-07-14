@@ -11,10 +11,19 @@ export interface EligiblePoint {
   name: string;
   code: string;
   city: string;
+  type: "MART" | "POINT";
   distance: number | null;
 }
 
-// Cek 1 Point tertentu punya stok cukup untuk SEMUA item di keranjang.
+export interface BackOrderOption {
+  pointId: string;
+  name: string;
+  code: string;
+  city: string;
+  isBackOrder: true;
+}
+
+// Cek 1 lokasi tertentu punya stok cukup untuk SEMUA item di keranjang.
 export async function pointHasStockForCart(pointId: string, cart: CartLine[]): Promise<boolean> {
   for (const line of cart) {
     const inv = await prisma.inventory.findUnique({
@@ -25,20 +34,38 @@ export async function pointHasStockForCart(pointId: string, cart: CartLine[]): P
   return true;
 }
 
-// Daftar semua Point yang stoknya cukup untuk keranjang ini, diurutkan dari
-// yang paling dekat (kalau ada koordinat customer). Dipakai untuk:
-//  1) checkout customer memilih sendiri Point-nya (GET/POST /points/eligible)
-//  2) fallback otomatis di selectBestPoint kalau customer tidak memilih.
+function sortByDistanceOrCity<T extends { distance: number | null; city: string }>(
+  list: T[],
+  customerCity?: string | null
+): T[] {
+  const withDistance = list.filter((p) => p.distance != null);
+  const withoutDistance = list.filter((p) => p.distance == null);
+  if (withDistance.length > 0) {
+    withDistance.sort((a, b) => (a.distance as number) - (b.distance as number));
+    return [...withDistance, ...withoutDistance];
+  }
+  if (customerCity) {
+    withoutDistance.sort((a, b) => {
+      const aMatch = a.city.toLowerCase() === customerCity.toLowerCase() ? 0 : 1;
+      const bMatch = b.city.toLowerCase() === customerCity.toLowerCase() ? 0 : 1;
+      return aMatch - bMatch;
+    });
+  }
+  return withoutDistance;
+}
+
+// SMART ORDER ROUTING — daftar lokasi customer-facing (Mart & Point) yang
+// stoknya cukup untuk keranjang ini, dengan PRIORITAS:
+//   1) Semua Point yang stoknya cukup, diurutkan dari yang terdekat.
+//   2) Baru semua Mart yang stoknya cukup, diurutkan dari yang terdekat.
+// RDH tidak pernah muncul di sini (gudang murni, bukan customer-facing) —
+// dipakai belakangan (findBackOrderOption) cuma kalau Point & Mart kosong semua.
 export async function listEligiblePoints(
   cart: CartLine[],
   customerLat?: number | null,
   customerLon?: number | null,
   customerCity?: string | null
 ): Promise<EligiblePoint[]> {
-  // RDH adalah gudang murni (Hub) — tidak melayani customer langsung, jadi tidak
-  // pernah muncul sebagai pilihan checkout. Hanya Mart & Point yang customer-facing.
-  // (Urutan prioritas Point > Mart akan ditambahkan di Smart Order Routing berikutnya;
-  // untuk sekarang keduanya diurutkan campur berdasarkan jarak terdekat.)
   const points = await prisma.fulfillmentPoint.findMany({ where: { isActive: true, type: { not: "RDH" } } });
   const eligible: EligiblePoint[] = [];
 
@@ -51,30 +78,53 @@ export async function listEligiblePoints(
         ? distanceKm(customerLat, customerLon, point.latitude, point.longitude)
         : null;
 
-    eligible.push({ pointId: point.id, name: point.name, code: point.code, city: point.city, distance });
-  }
-
-  const withDistance = eligible.filter((p) => p.distance != null);
-  const withoutDistance = eligible.filter((p) => p.distance == null);
-
-  if (withDistance.length > 0) {
-    withDistance.sort((a, b) => (a.distance as number) - (b.distance as number));
-    return [...withDistance, ...withoutDistance];
-  }
-
-  // Tidak ada koordinat: kalau kota customer cocok, taruh di depan.
-  if (customerCity) {
-    withoutDistance.sort((a, b) => {
-      const aMatch = a.city.toLowerCase() === customerCity.toLowerCase() ? 0 : 1;
-      const bMatch = b.city.toLowerCase() === customerCity.toLowerCase() ? 0 : 1;
-      return aMatch - bMatch;
+    eligible.push({
+      pointId: point.id,
+      name: point.name,
+      code: point.code,
+      city: point.city,
+      type: point.type as "MART" | "POINT", // aman: query di atas sudah exclude RDH
+      distance,
     });
   }
-  return withoutDistance;
+
+  const pointsOnly = sortByDistanceOrCity(eligible.filter((p) => p.type === "POINT"), customerCity);
+  const martsOnly = sortByDistanceOrCity(eligible.filter((p) => p.type === "MART"), customerCity);
+  return [...pointsOnly, ...martsOnly];
 }
 
-// INI FITUR UTAMA RUMACART (fallback otomatis): kalau customer tidak memilih
-// Point sendiri, sistem pilih Point terdekat/tercocok yang stoknya cukup.
+// Fallback terakhir kalau TIDAK ADA Point maupun Mart yang stoknya cukup:
+// cari RDH (kota yang sama dulu, baru terdekat) yang stoknya cukup. Order yang
+// dipenuhi dari sini ditandai `isBackOrder` (estimasi pengiriman lebih lama,
+// karena RDH murni gudang — bukan titik layanan customer biasa).
+export async function findBackOrderOption(
+  cart: CartLine[],
+  customerLat?: number | null,
+  customerLon?: number | null,
+  customerCity?: string | null
+): Promise<BackOrderOption | null> {
+  const hubs = await prisma.fulfillmentPoint.findMany({ where: { isActive: true, type: "RDH" } });
+  const eligible: { pointId: string; name: string; code: string; city: string; distance: number | null }[] = [];
+
+  for (const hub of hubs) {
+    const hasStockForAll = await pointHasStockForCart(hub.id, cart);
+    if (!hasStockForAll) continue;
+    const distance =
+      customerLat != null && customerLon != null
+        ? distanceKm(customerLat, customerLon, hub.latitude, hub.longitude)
+        : null;
+    eligible.push({ pointId: hub.id, name: hub.name, code: hub.code, city: hub.city, distance });
+  }
+
+  const sorted = sortByDistanceOrCity(eligible, customerCity);
+  if (sorted.length === 0) return null;
+  const best = sorted[0];
+  return { pointId: best.pointId, name: best.name, code: best.code, city: best.city, isBackOrder: true };
+}
+
+// Fallback otomatis kalau customer tidak memilih lokasi sendiri: Point > Mart
+// sesuai prioritas Smart Order Routing. TIDAK termasuk fallback RDH/Back Order
+// (itu ditangani terpisah oleh createOrder, karena butuh penanda isBackOrder).
 export async function selectBestPoint(
   cart: CartLine[],
   customerLat?: number | null,
@@ -83,7 +133,7 @@ export async function selectBestPoint(
 ) {
   const eligible = await listEligiblePoints(cart, customerLat, customerLon, customerCity);
   if (eligible.length === 0) {
-    throw new Error("Tidak ada Point dengan stok mencukupi untuk pesanan ini");
+    throw new Error("Tidak ada Point atau Mart dengan stok mencukupi untuk pesanan ini");
   }
   return eligible[0].pointId;
 }

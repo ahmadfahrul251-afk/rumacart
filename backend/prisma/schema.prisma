@@ -44,9 +44,8 @@ enum OrderStatus {
 }
 
 enum ShippingMethod {
-  PICKUP
-  INSTANT
-  SAME_DAY
+  PICKUP // ambil sendiri di Point, selalu gratis & selalu tersedia
+  DELIVERY // diantar kurir — biaya & ketersediaan tergantung DeliveryArea Point tujuan
 }
 
 enum PaymentMethod {
@@ -69,6 +68,16 @@ enum InventoryMoveType {
   TRANSFER_OUT
   ADJUSTMENT
   SALE
+  RETURN   // barang kembali dari customer/lokasi lain, stok bertambah
+  DAMAGE   // barang rusak, stok berkurang & tidak bisa dijual lagi
+  EXPIRED  // barang kadaluarsa, stok berkurang & tidak bisa dijual lagi
+}
+
+enum RestockRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FULFILLED // sudah dibuatkan Stock Transfer dari lokasi sumber
 }
 
 enum CashflowType {
@@ -146,6 +155,7 @@ model Address {
   recipientName String
   phone         String
   fullAddress   String
+  kecamatan     String? // dipakai cocokkan jangkauan pengiriman (DeliveryArea) tiap Point
   city          String
   province      String
   postalCode    String?
@@ -202,6 +212,7 @@ model Product {
   reviews    Review[]
   purchaseOrderItems PurchaseOrderItem[]
   stockTransferItems StockTransferItem[]
+  restockRequests     RestockRequest[]
 
   @@map("products")
 }
@@ -265,9 +276,32 @@ model FulfillmentPoint {
   purchaseOrders PurchaseOrder[]
   admins         User[]           @relation("PointAdmin")
   localSuppliers Supplier[]
-  stockTransfers StockTransfer[]
+  stockTransfers      StockTransfer[]   @relation("TransferTo")
+  stockTransfersFrom  StockTransfer[]   @relation("TransferFrom")
+  restockRequests     RestockRequest[]  @relation("RestockPoint")
+  restockRequestsSourced RestockRequest[] @relation("RestockSource")
+  deliveryAreas       DeliveryArea[]
 
   @@map("fulfillment_points")
+}
+
+// Area jangkauan kurir 1 Point, per kecamatan — dipakai buat tentuin apakah
+// Point ini bisa DELIVERY ke alamat tertentu, dan berapa biayanya. Kecamatan
+// yang tidak terdaftar di sini artinya Point tersebut tidak melayani
+// pengiriman ke situ (customer tetap bisa PICKUP langsung ke Point).
+model DeliveryArea {
+  id        String   @id @default(cuid())
+  pointId   String
+  kecamatan String
+  city      String
+  cost      Int // biaya antar ke kecamatan ini dari Point ini
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  point FulfillmentPoint @relation(fields: [pointId], references: [id], onDelete: Cascade)
+
+  @@unique([pointId, kecamatan, city])
+  @@map("delivery_areas")
 }
 
 model Inventory {
@@ -276,6 +310,8 @@ model Inventory {
   pointId   String
   stock     Int      @default(0)
   minStock  Int      @default(5)
+  maxStock    Int?   // batas atas stok "ideal" di lokasi ini — dipakai hitung jumlah Restock Request
+  safetyStock Int?   // cadangan minimum yang tidak boleh disentuh kecuali darurat (opsional, buat referensi Admin)
   updatedAt DateTime @updatedAt
 
   product Product          @relation(fields: [productId], references: [id])
@@ -342,6 +378,7 @@ model Order {
   total          Int
   costTotal      Int            @default(0) // total harga modal (costPrice x qty) untuk order ini
   belowCost      Boolean        @default(false) // true kalau (subtotal - discount) < costTotal, artinya diskon menggerus modal
+  isBackOrder    Boolean        @default(false) // true kalau tidak ada Point/Mart terdekat yang stoknya cukup, jadi dipenuhi langsung dari RDH (estimasi lebih lama)
   notes          String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -481,14 +518,17 @@ model PurchaseOrderItem {
   @@map("purchase_order_items")
 }
 
-// ================== TRANSFER STOK (PUSAT -> POINT) ==================
-// Admin Pusat berperan sebagai "supplier internal" buat tiap Point — beda dari
-// PurchaseOrder (yang buat beli dari Supplier eksternal/lokal), transfer ini
-// tidak melibatkan uang/Supplier, cuma pemindahan stok dari Pusat ke Point.
+// ================== TRANSFER STOK (ANTAR LOKASI) ==================
+// Sesuai arsitektur Hub and Spoke: transfer bisa RDH->Mart, RDH->Point,
+// Mart->Point, Mart->Mart, RDH->RDH, dst — beda dari PurchaseOrder (beli dari
+// Supplier eksternal), transfer ini tidak melibatkan uang, cuma pemindahan
+// stok antar lokasi RumaCart sendiri. `fromPointId` nullable buat data lama
+// (dulu implisit "dari Pusat", stok sumbernya tidak dipotong).
 
 model StockTransfer {
   id             String              @id @default(cuid())
   transferNumber String              @unique
+  fromPointId    String?             // null = data lama ("dari Pusat", stok sumber tidak dipotong)
   toPointId      String
   status         StockTransferStatus @default(SENT)
   notes          String?
@@ -496,7 +536,8 @@ model StockTransfer {
   createdAt      DateTime            @default(now())
   receivedAt     DateTime?
 
-  toPoint   FulfillmentPoint    @relation(fields: [toPointId], references: [id])
+  fromPoint FulfillmentPoint?   @relation("TransferFrom", fields: [fromPointId], references: [id])
+  toPoint   FulfillmentPoint    @relation("TransferTo", fields: [toPointId], references: [id])
   createdBy User?               @relation(fields: [createdById], references: [id])
   items     StockTransferItem[]
 
@@ -513,6 +554,33 @@ model StockTransferItem {
   product  Product       @relation(fields: [productId], references: [id])
 
   @@map("stock_transfer_items")
+}
+
+// ================== SMART RESTOCK ==================
+// Dibuat otomatis oleh sistem begitu stok 1 produk di 1 lokasi turun sampai
+// atau di bawah minStock (dipicu setelah penjualan/stock-out/transfer keluar).
+// Bisa juga dibuat manual oleh Admin Lokasi. Setelah di-approve & di-"fulfill",
+// sistem otomatis bikin Stock Transfer dari lokasi sumber ke lokasi peminta.
+model RestockRequest {
+  id            String                @id @default(cuid())
+  requestNumber String                @unique
+  pointId       String                // lokasi yang butuh restock
+  productId     String
+  qty           Int                   // jumlah yang diminta
+  status        RestockRequestStatus  @default(PENDING)
+  sourceHubId   String?               // lokasi yang akan mensuplai (biasanya RDH/Mart induk)
+  isAuto        Boolean               @default(false) // true kalau dibuat otomatis oleh sistem
+  note          String?
+  transferId    String?               // diisi setelah di-fulfill, link ke Stock Transfer yang dibuat
+  createdAt     DateTime              @default(now())
+  approvedAt    DateTime?
+  fulfilledAt   DateTime?
+
+  point     FulfillmentPoint  @relation("RestockPoint", fields: [pointId], references: [id])
+  sourceHub FulfillmentPoint? @relation("RestockSource", fields: [sourceHubId], references: [id])
+  product   Product           @relation(fields: [productId], references: [id])
+
+  @@map("restock_requests")
 }
 
 // ================== NOTIFIKASI ==================

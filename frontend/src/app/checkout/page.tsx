@@ -10,15 +10,10 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { api } from "@/lib/api";
-import { Address, Order, Voucher } from "@/types";
+import { Address, Order, Voucher, DeliveryQuote } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 import { Tag, X, MapPin } from "lucide-react";
 
-const SHIPPING_OPTIONS = [
-  { value: "PICKUP", label: "Pickup di Point", cost: 0 },
-  { value: "SAME_DAY", label: "Same Day", cost: 9000 },
-  { value: "INSTANT", label: "Instant", cost: 15000 },
-];
 const PAYMENT_OPTIONS = [
   { value: "COD", label: "Bayar di Tempat (COD)" },
   { value: "TRANSFER", label: "Transfer Bank" },
@@ -33,9 +28,14 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressId, setAddressId] = useState("");
   const [showNewAddress, setShowNewAddress] = useState(false);
-  const [newAddress, setNewAddress] = useState({ recipientName: "", phone: "", fullAddress: "", city: "" });
+  const [newAddress, setNewAddress] = useState({ recipientName: "", phone: "", fullAddress: "", kecamatan: "", city: "" });
 
-  const [shippingMethod, setShippingMethod] = useState("PICKUP");
+  // Ongkir sekarang PICKUP (gratis) atau DELIVERY (biaya beda-beda tergantung
+  // kecamatan tujuan x Point asal) — dipilih PER GRUP Point, bukan global lagi,
+  // karena jangkauan & biaya kurir tiap Point bisa berbeda.
+  const [shippingMethods, setShippingMethods] = useState<Record<string, "PICKUP" | "DELIVERY">>({});
+  const [quotes, setQuotes] = useState<Record<string, DeliveryQuote>>({});
+
   const [paymentMethod, setPaymentMethod] = useState("COD");
   const [voucherCode, setVoucherCode] = useState("");
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null);
@@ -73,9 +73,43 @@ export default function CheckoutPage() {
   );
   const groupList = Object.values(groups);
   const isMultiOrder = groupList.length > 1;
+  const pointIdsKey = groupList.map((g) => g.pointId).join(",");
 
-  const shippingCostPerOrder = SHIPPING_OPTIONS.find((s) => s.value === shippingMethod)?.cost ?? 0;
-  const totalShippingCost = shippingCostPerOrder * groupList.length;
+  const selectedAddress = !showNewAddress ? addresses.find((a) => a.id === addressId) : null;
+  const effectiveKecamatan = (showNewAddress ? newAddress.kecamatan : selectedAddress?.kecamatan) || "";
+  const effectiveCity = (showNewAddress ? newAddress.city : selectedAddress?.city) || "";
+
+  // Cek ongkir DELIVERY tiap grup Point sekali panggil, dicocokkan ke kecamatan
+  // alamat yang lagi dipilih/diisi. Kalau Point-nya tidak melayani kecamatan
+  // itu, otomatis dikunci ke PICKUP.
+  useEffect(() => {
+    if (!pointIdsKey) return;
+    api
+      .post<Record<string, DeliveryQuote>>("/delivery-areas/quote", {
+        pointIds: pointIdsKey.split(","),
+        kecamatan: effectiveKecamatan || undefined,
+        city: effectiveCity || undefined,
+      })
+      .then((res) => {
+        setQuotes(res);
+        setShippingMethods((prev) => {
+          const next = { ...prev };
+          for (const pid of pointIdsKey.split(",")) {
+            const avail = res[pid]?.available;
+            if (!next[pid] || (next[pid] === "DELIVERY" && !avail)) {
+              next[pid] = avail ? "DELIVERY" : "PICKUP";
+            }
+          }
+          return next;
+        });
+      })
+      .catch(() => setQuotes({}));
+  }, [pointIdsKey, effectiveKecamatan, effectiveCity]);
+
+  const totalShippingCost = groupList.reduce(
+    (sum, g) => sum + (shippingMethods[g.pointId] === "DELIVERY" ? quotes[g.pointId]?.cost ?? 0 : 0),
+    0
+  );
   const discount = appliedVoucher?.discount ?? 0;
   const total = Math.max(subtotal + totalShippingCost - discount, 0);
 
@@ -121,7 +155,7 @@ export default function CheckoutPage() {
           const order = await api.post<Order>("/orders", {
             addressId: finalAddressId,
             items: g.items.map((it) => ({ productId: it.productId, qty: it.qty })),
-            shippingMethod,
+            shippingMethod: shippingMethods[g.pointId] || "PICKUP",
             paymentMethod,
             // Voucher cuma dipakai sekali, di Order pertama saja — supaya tidak
             // dobel potongan/dobel pakai kuota kalau pesanan dipecah jadi beberapa.
@@ -185,7 +219,12 @@ export default function CheckoutPage() {
                       <input type="radio" name="address" checked={addressId === a.id} onChange={() => setAddressId(a.id)} className="mt-1" />
                       <div className="text-sm">
                         <p className="font-medium">{a.label} — {a.recipientName}</p>
-                        <p className="text-ink/60">{a.fullAddress}, {a.city}</p>
+                        <p className="text-ink/60">
+                          {a.fullAddress}{a.kecamatan ? `, Kec. ${a.kecamatan}` : ""}, {a.city}
+                        </p>
+                        {!a.kecamatan && (
+                          <p className="text-xs text-amber-600">Kecamatan belum diisi — opsi Diantar mungkin tidak muncul.</p>
+                        )}
                       </div>
                     </label>
                   ))}
@@ -198,7 +237,11 @@ export default function CheckoutPage() {
                   <Input placeholder="Nama Penerima" value={newAddress.recipientName} onChange={(e) => setNewAddress({ ...newAddress, recipientName: e.target.value })} />
                   <Input placeholder="No. HP" value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })} />
                   <Input placeholder="Alamat Lengkap" value={newAddress.fullAddress} onChange={(e) => setNewAddress({ ...newAddress, fullAddress: e.target.value })} />
-                  <Input placeholder="Kota" value={newAddress.city} onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} />
+                  <div className="grid grid-cols-2 gap-3">
+                    <Input placeholder="Kecamatan" value={newAddress.kecamatan} onChange={(e) => setNewAddress({ ...newAddress, kecamatan: e.target.value })} />
+                    <Input placeholder="Kota" value={newAddress.city} onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} />
+                  </div>
+                  <p className="text-xs text-ink/40">Isi Kecamatan supaya sistem bisa cek Point mana yang bisa antar ke alamatmu.</p>
                   {addresses.length > 0 && (
                     <button onClick={() => setShowNewAddress(false)} className="text-sm text-ink/60">Batal, pilih alamat tersimpan</button>
                   )}
@@ -207,7 +250,7 @@ export default function CheckoutPage() {
             </section>
 
             <section className="card">
-              <p className="mb-3 font-semibold">Pesanan {isMultiOrder ? `(${groupList.length} Point → ${groupList.length} pesanan terpisah)` : "dari"}</p>
+              <p className="mb-3 font-semibold">Pesanan {isMultiOrder ? `(${groupList.length} Point → ${groupList.length} pesanan terpisah)` : ""}</p>
               {isMultiOrder && (
                 <p className="mb-3 text-xs text-amber-700">
                   Produk di keranjangmu berasal dari {groupList.length} Point berbeda, jadi otomatis dipecah jadi {groupList.length} pesanan —
@@ -215,39 +258,55 @@ export default function CheckoutPage() {
                 </p>
               )}
               <div className="space-y-4">
-                {groupList.map((g) => (
-                  <div key={g.pointId} className="rounded-xl border border-black/10 p-3">
-                    <p className="mb-2 flex items-center gap-1.5 text-sm font-medium">
-                      <MapPin size={14} className="text-primary" /> {g.pointName} <span className="font-normal text-ink/40">({g.pointCode})</span>
-                    </p>
-                    {g.items.map((it) => (
-                      <div key={it.productId} className="flex justify-between text-sm text-ink/70">
-                        <span>{it.name} x{it.qty}</span>
-                        <span>{formatRupiah(it.price * it.qty)}</span>
+                {groupList.map((g) => {
+                  const quote = quotes[g.pointId];
+                  const method = shippingMethods[g.pointId] || "PICKUP";
+                  return (
+                    <div key={g.pointId} className="rounded-xl border border-black/10 p-3">
+                      <p className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+                        <MapPin size={14} className="text-primary" /> {g.pointName} <span className="font-normal text-ink/40">({g.pointCode})</span>
+                      </p>
+                      {g.items.map((it) => (
+                        <div key={it.productId} className="flex justify-between text-sm text-ink/70">
+                          <span>{it.name} x{it.qty}</span>
+                          <span>{formatRupiah(it.price * it.qty)}</span>
+                        </div>
+                      ))}
+                      <div className="mt-1.5 flex justify-between border-t border-black/5 pt-1.5 text-xs text-ink/50">
+                        <span>Subtotal Point ini</span>
+                        <span>{formatRupiah(g.subtotal)}</span>
                       </div>
-                    ))}
-                    <div className="mt-1.5 flex justify-between border-t border-black/5 pt-1.5 text-xs text-ink/50">
-                      <span>Subtotal Point ini</span>
-                      <span>{formatRupiah(g.subtotal)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
 
-            <section className="card">
-              <p className="mb-3 font-semibold">Metode Pengiriman</p>
-              {isMultiOrder && (
-                <p className="mb-2 text-xs text-ink/50">Ongkir dihitung per pesanan (per Point), karena tiap Point mengirim terpisah.</p>
-              )}
-              <div className="grid gap-2 sm:grid-cols-3">
-                {SHIPPING_OPTIONS.map((opt) => (
-                  <label key={opt.value} className={`cursor-pointer rounded-xl border p-3 text-sm has-[:checked]:border-primary has-[:checked]:bg-primary-light ${shippingMethod === opt.value ? "border-primary" : "border-black/10"}`}>
-                    <input type="radio" name="shipping" className="hidden" checked={shippingMethod === opt.value} onChange={() => setShippingMethod(opt.value)} />
-                    <p className="font-medium">{opt.label}</p>
-                    <p className="text-ink/50">{opt.cost === 0 ? "Gratis" : formatRupiah(opt.cost)}</p>
-                  </label>
-                ))}
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <label className={`cursor-pointer rounded-xl border p-2.5 text-xs has-[:checked]:border-primary has-[:checked]:bg-primary-light ${method === "PICKUP" ? "border-primary" : "border-black/10"}`}>
+                          <input type="radio" name={`ship-${g.pointId}`} className="hidden" checked={method === "PICKUP"} onChange={() => setShippingMethods((s) => ({ ...s, [g.pointId]: "PICKUP" }))} />
+                          <p className="font-medium">Pickup di Point</p>
+                          <p className="text-ink/50">Gratis, ambil sendiri</p>
+                        </label>
+                        <label
+                          className={`rounded-xl border p-2.5 text-xs ${
+                            quote?.available
+                              ? `cursor-pointer has-[:checked]:border-primary has-[:checked]:bg-primary-light ${method === "DELIVERY" ? "border-primary" : "border-black/10"}`
+                              : "cursor-not-allowed border-black/5 opacity-50"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`ship-${g.pointId}`}
+                            className="hidden"
+                            disabled={!quote?.available}
+                            checked={method === "DELIVERY"}
+                            onChange={() => setShippingMethods((s) => ({ ...s, [g.pointId]: "DELIVERY" }))}
+                          />
+                          <p className="font-medium">Diantar Kurir</p>
+                          <p className="text-ink/50">
+                            {quote?.available ? formatRupiah(quote.cost) : "Tidak melayani kecamatan ini"}
+                          </p>
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </section>
 
@@ -321,8 +380,8 @@ export default function CheckoutPage() {
             <p className="font-semibold">Ringkasan Pesanan</p>
             <div className="flex justify-between text-sm"><span>Subtotal</span><span>{formatRupiah(subtotal)}</span></div>
             <div className="flex justify-between text-sm">
-              <span>Ongkir {isMultiOrder && `(${groupList.length}x)`}</span>
-              <span>{formatRupiah(totalShippingCost)}</span>
+              <span>Ongkir</span>
+              <span>{totalShippingCost === 0 ? "Gratis" : formatRupiah(totalShippingCost)}</span>
             </div>
             {discount > 0 && (
               <div className="flex justify-between text-sm text-primary"><span>Diskon Voucher</span><span>-{formatRupiah(discount)}</span></div>

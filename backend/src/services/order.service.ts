@@ -1,13 +1,15 @@
 import { prisma } from "../config/db";
-import { selectBestPoint, pointHasStockForCart, CartLine } from "./pointSelector.service";
+import { selectBestPoint, pointHasStockForCart, findBackOrderOption, CartLine } from "./pointSelector.service";
 import { recordCashflow } from "./cashflow.service";
 import { calcVoucherDiscount } from "./voucher.service";
+import { checkAndCreateRestockRequest } from "./restockRequest.service";
+import { getDeliveryCost } from "./deliveryArea.service";
 
 interface CreateOrderInput {
   customerId: string;
   addressId?: string;
   items: CartLine[];
-  shippingMethod: "PICKUP" | "INSTANT" | "SAME_DAY";
+  shippingMethod: "PICKUP" | "DELIVERY";
   paymentMethod: "COD" | "TRANSFER" | "EWALLET";
   voucherCode?: string;
   notes?: string;
@@ -16,12 +18,6 @@ interface CreateOrderInput {
   // yang stoknya cukup (perilaku lama, dipakai juga sebagai fallback).
   pointId?: string;
 }
-
-const SHIPPING_COST: Record<string, number> = {
-  PICKUP: 0,
-  SAME_DAY: 9000,
-  INSTANT: 15000,
-};
 
 export async function createOrder(input: CreateOrderInput) {
   if (!input.items.length) throw new Error("Keranjang kosong");
@@ -32,33 +28,46 @@ export async function createOrder(input: CreateOrderInput) {
   });
   const productMap = new Map(products.map((p: any) => [p.id, p]));
 
-  // 2. Tentukan alamat customer (untuk cari Point terdekat).
+  // 2. Tentukan alamat customer (untuk cari Point terdekat + cek jangkauan kurir).
   let lat: number | null = null;
   let lon: number | null = null;
   let city: string | null = null;
+  let kecamatan: string | null = null;
   if (input.addressId) {
     const address = await prisma.address.findUnique({ where: { id: input.addressId } });
     if (address) {
       lat = address.latitude;
       lon = address.longitude;
       city = address.city;
+      kecamatan = address.kecamatan;
     }
   }
 
-  // 3. Tentukan Point pemenuhan pesanan.
-  //    Kalau customer sudah pilih sendiri (dari dropdown Point di checkout),
-  //    pakai itu — tapi tetap divalidasi ulang stoknya di sini (jangan percaya
-  //    begitu saja data dari client, bisa saja sudah berubah/kehabisan).
-  //    Kalau tidak pilih, sistem otomatis cari Point terdekat yang stoknya cukup.
+  // 3. Tentukan lokasi pemenuhan pesanan (Smart Order Routing).
+  //    Kalau customer sudah pilih sendiri (dari dropdown di checkout, termasuk
+  //    opsi Back Order dari RDH kalau Point/Mart kosong semua), pakai itu — tapi
+  //    tetap divalidasi ulang stoknya di sini (jangan percaya begitu saja data
+  //    dari client, bisa saja sudah berubah/kehabisan sejak halaman dibuka).
+  //    Kalau tidak pilih: coba Point/Mart terdekat dulu, baru fallback RDH (Back Order).
   let pointId: string;
+  let isBackOrder = false;
   if (input.pointId) {
     const stillHasStock = await pointHasStockForCart(input.pointId, input.items);
     if (!stillHasStock) {
-      throw new Error("Stok di Point yang dipilih sudah tidak mencukupi, silakan pilih Point lain");
+      throw new Error("Stok di lokasi yang dipilih sudah tidak mencukupi, silakan pilih lokasi lain");
     }
     pointId = input.pointId;
+    const chosenLocation = await prisma.fulfillmentPoint.findUnique({ where: { id: pointId } });
+    isBackOrder = chosenLocation?.type === "RDH";
   } else {
-    pointId = await selectBestPoint(input.items, lat, lon, city);
+    try {
+      pointId = await selectBestPoint(input.items, lat, lon, city);
+    } catch {
+      const backOrder = await findBackOrderOption(input.items, lat, lon, city);
+      if (!backOrder) throw new Error("Stok habis di seluruh jaringan untuk pesanan ini");
+      pointId = backOrder.pointId;
+      isBackOrder = true;
+    }
   }
 
   // 4. Hitung subtotal berdasarkan harga di database (bukan dari client).
@@ -88,7 +97,18 @@ export async function createOrder(input: CreateOrderInput) {
     }
   }
 
-  const shippingCost = SHIPPING_COST[input.shippingMethod] ?? 0;
+  // 5b. Ongkir: PICKUP selalu gratis. DELIVERY dihitung dari DeliveryArea milik
+  //     Point ini yang cocok dengan kecamatan alamat tujuan — kalau Point ini
+  //     tidak melayani kecamatan itu, DELIVERY ditolak (customer perlu pilih
+  //     PICKUP atau Point lain yang menjangkau).
+  let shippingCost = 0;
+  if (input.shippingMethod === "DELIVERY") {
+    const quote = await getDeliveryCost(pointId, kecamatan, city);
+    if (!quote.available) {
+      throw new Error("Point ini tidak melayani pengiriman ke kecamatan alamat tujuanmu, pilih Pickup atau Point lain");
+    }
+    shippingCost = quote.cost;
+  }
   const total = Math.max(subtotal + shippingCost - discount, 0);
   const orderNumber = generateOrderNumber();
 
@@ -114,6 +134,7 @@ export async function createOrder(input: CreateOrderInput) {
         total,
         costTotal,
         belowCost,
+        isBackOrder,
         notes: input.notes,
         items: { create: orderItemsData },
         payment: { create: { method: input.paymentMethod, amount: total, status: "PENDING" } },
@@ -169,6 +190,14 @@ export async function createOrder(input: CreateOrderInput) {
     refType: "ORDER",
     refId: order.id,
   });
+
+  // 8. Smart Restock: cek tiap produk yang baru laku, kalau stoknya di lokasi ini
+  //    sudah turun sampai/di bawah minStock, sistem otomatis bikin Restock Request.
+  //    Dijalankan di luar transaction utama (bukan bagian kritis checkout — kalau
+  //    gagal pun order tetap sukses, cuma restock request-nya tidak sempat dibuat).
+  for (const line of input.items) {
+    await checkAndCreateRestockRequest(line.productId, pointId).catch(() => {});
+  }
 
   return order;
 }

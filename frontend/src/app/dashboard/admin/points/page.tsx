@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Store, Boxes, Wallet, TriangleAlert, Plus, Pencil, Warehouse, ShoppingBag, MapPin } from "lucide-react";
+import { Store, Boxes, Wallet, TriangleAlert, Plus, Pencil, Warehouse, ShoppingBag, MapPin, Users, Truck, TrendingUp } from "lucide-react";
 import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { PointMonitoring, NetworkSummary, LocationType } from "@/types";
+import { PointMonitoring, NetworkSummary, LocationType, TopProduct, CitySales } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
 const TYPE_LABEL: Record<LocationType, string> = { RDH: "RDH", MART: "Mart", POINT: "Point" };
@@ -23,6 +23,8 @@ const TYPE_BADGE: Record<LocationType, string> = {
 function PointsMonitoringContent() {
   const [locations, setLocations] = useState<PointMonitoring[] | null>(null);
   const [summary, setSummary] = useState<NetworkSummary | null>(null);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [salesByCity, setSalesByCity] = useState<CitySales[]>([]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | LocationType>("ALL");
@@ -34,10 +36,14 @@ function PointsMonitoringContent() {
     if (to) params.set("to", to);
     const qs = params.toString() ? `?${params.toString()}` : "";
     api
-      .get<{ summary: NetworkSummary; locations: PointMonitoring[] }>(`/points/monitoring${qs}`)
+      .get<{ summary: NetworkSummary; locations: PointMonitoring[]; topProducts: TopProduct[]; salesByCity: CitySales[] }>(
+        `/points/monitoring${qs}`
+      )
       .then((res) => {
         setSummary(res.summary);
         setLocations(res.locations);
+        setTopProducts(res.topProducts || []);
+        setSalesByCity(res.salesByCity || []);
       })
       .catch(() => setLocations([]));
   }
@@ -52,8 +58,9 @@ function PointsMonitoringContent() {
       stockValue: acc.stockValue + p.stockValue,
       orderCount: acc.orderCount + p.orderCount,
       revenue: acc.revenue + p.revenue,
+      profit: acc.profit + p.profit,
     }),
-    { claimedProducts: 0, stockValue: 0, orderCount: 0, revenue: 0 }
+    { claimedProducts: 0, stockValue: 0, orderCount: 0, revenue: 0, profit: 0 }
   );
 
   return (
@@ -76,6 +83,11 @@ function PointsMonitoringContent() {
         <StatCard label="Total RDH" value={summary ? summary.totalRDH : "..."} icon={<Warehouse size={18} className="text-amber-600" />} />
         <StatCard label="Total Mart" value={summary ? summary.totalMart : "..."} icon={<Store size={18} className="text-blue-600" />} />
         <StatCard label="Total Point" value={summary ? summary.totalPoint : "..."} icon={<ShoppingBag size={18} className="text-primary" />} />
+      </div>
+
+      <div className="mb-4 grid gap-4 sm:grid-cols-2">
+        <StatCard label="Total Customer" value={summary ? summary.totalCustomers : "..."} icon={<Users size={18} className="text-blue-600" />} />
+        <StatCard label="Total Kurir" value={summary ? summary.totalKurir : "..."} icon={<Truck size={18} className="text-amber-600" />} />
       </div>
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
@@ -110,10 +122,49 @@ function PointsMonitoringContent() {
         )}
       </div>
 
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Total Produk Diklaim" value={totals ? totals.claimedProducts : "..."} icon={<Boxes size={18} className="text-ink/60" />} />
         <StatCard label="Total Nilai Stok" value={totals ? formatRupiah(totals.stockValue) : "..."} icon={<Wallet size={18} />} />
         <StatCard label="Total Omzet" value={totals ? formatRupiah(totals.revenue) : "..."} icon={<Wallet size={18} className="text-primary" />} />
+        <StatCard label="Total Profit" value={totals ? formatRupiah(totals.profit) : "..."} icon={<TrendingUp size={18} className="text-emerald-600" />} />
+      </div>
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <div className="card">
+          <p className="mb-1 font-semibold">Produk Terlaris</p>
+          <p className="mb-3 text-xs text-ink/40">Top 5 nasional, berdasarkan jumlah unit terjual di rentang tanggal ini.</p>
+          {topProducts.length === 0 && <p className="py-4 text-center text-sm text-ink/40">Belum ada penjualan.</p>}
+          {topProducts.length > 0 && (
+            <div className="space-y-2">
+              {topProducts.map((tp, i) => (
+                <div key={tp.productId} className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-accent text-xs font-medium text-ink/60">{i + 1}</span>
+                    {tp.name}
+                  </span>
+                  <span className="text-ink/60">{tp.qtySold} unit · {formatRupiah(tp.revenue)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="card">
+          <p className="mb-1 font-semibold">Penjualan per Kota</p>
+          <p className="mb-3 text-xs text-ink/40">
+            Ringkasan tabel per kota (belum ada peta sebaran di stack ini — daftar ini jadi penggantinya sementara).
+          </p>
+          {salesByCity.length === 0 && <p className="py-4 text-center text-sm text-ink/40">Belum ada penjualan.</p>}
+          {salesByCity.length > 0 && (
+            <div className="space-y-2">
+              {salesByCity.map((c) => (
+                <div key={c.city} className="flex items-center justify-between text-sm">
+                  <span>{c.city}</span>
+                  <span className="text-ink/60">{c.orderCount} order · {formatRupiah(c.revenue)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="card overflow-x-auto">
@@ -141,6 +192,7 @@ function PointsMonitoringContent() {
                 <th className="pb-2">Stok Menipis/Habis</th>
                 <th className="pb-2">Order</th>
                 <th className="pb-2 text-right">Omzet</th>
+                <th className="pb-2 text-right">Profit</th>
                 <th className="pb-2"></th>
               </tr>
             </thead>
@@ -174,6 +226,7 @@ function PointsMonitoringContent() {
                   </td>
                   <td className="py-2">{p.orderCount}</td>
                   <td className="py-2 text-right font-medium">{formatRupiah(p.revenue)}</td>
+                  <td className="py-2 text-right font-medium text-emerald-600">{formatRupiah(p.profit)}</td>
                   <td className="py-2 text-right">
                     <Link
                       href={`/dashboard/admin/points/${p.id}/edit`}

@@ -15,6 +15,7 @@ import { StockTransfer } from "@/types";
 function StockTransfersContent() {
   const { user } = useAuth();
   const isPusat = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
+  const isAdminLokasi = user?.role === "ADMIN_POINT";
   const [transfers, setTransfers] = useState<StockTransfer[] | null>(null);
 
   useEffect(() => {
@@ -29,11 +30,9 @@ function StockTransfersContent() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Transfer Stok</h1>
-          <p className="text-sm text-ink/60">
-            {isPusat ? "Kirim stok dari Pusat ke Point." : "Stok yang dikirim Pusat untuk Point kamu."}
-          </p>
+          <p className="text-sm text-ink/60">Pemindahan stok antar lokasi jaringan RumaCart.</p>
         </div>
-        {isPusat && (
+        {(isPusat || isAdminLokasi) && (
           <Link href="/dashboard/admin/stock-transfers/new" className="btn-primary !py-2 !px-4 text-sm">
             <Plus size={16} /> Kirim Transfer
           </Link>
@@ -52,7 +51,7 @@ function StockTransfersContent() {
         <EmptyState
           icon="🚚"
           title="Belum ada transfer stok"
-          description={isPusat ? "Kirim stok pertama ke salah satu Point." : "Belum ada stok yang dikirim Pusat ke Point kamu."}
+          description="Kirim transfer stok pertama antar lokasi."
         />
       )}
 
@@ -67,7 +66,7 @@ function StockTransfersContent() {
               <div>
                 <p className="font-semibold">{t.transferNumber}</p>
                 <p className="text-sm text-ink/60">
-                  Tujuan: {t.toPoint?.name || "-"} · {t.items.length} item
+                  {t.fromPoint?.name || "Pusat"} → {t.toPoint?.name || "-"} · {t.items.length} item
                 </p>
               </div>
               <Badge tone={t.status}>{t.status}</Badge>

@@ -19,6 +19,7 @@ export async function createAddress(req: Request, res: Response) {
       recipientName: body.recipientName,
       phone: body.phone,
       fullAddress: body.fullAddress,
+      kecamatan: body.kecamatan || null,
       city: body.city,
       province: body.province || "-",
       postalCode: body.postalCode,

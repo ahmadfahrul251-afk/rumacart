@@ -6,18 +6,23 @@ interface TransferItemInput {
 }
 
 interface CreateTransferInput {
+  fromPointId?: string; // kosong = mode lama ("dari Pusat", stok sumber tidak dipotong)
   toPointId: string;
   notes?: string;
   items: TransferItemInput[];
   createdById: string;
 }
 
-// Admin Pusat mengirim stok ke 1 Point (berperan sebagai "supplier internal").
-// Beda dari Purchase Order: TIDAK ada uang/cashflow yang tercatat di sini,
-// murni pemindahan stok. Status langsung "SENT" — stok Point tujuan BARU
-// bertambah setelah Point mengonfirmasi lewat receiveStockTransfer().
+// Transfer stok antar lokasi mana pun di jaringan RumaCart (RDH->Mart, RDH->Point,
+// Mart->Point, Mart->Mart, RDH->RDH, dst). Beda dari Purchase Order: TIDAK ada
+// uang/cashflow yang tercatat, murni pemindahan stok. Kalau `fromPointId` diisi,
+// stok lokasi asal langsung dipotong saat status SENT (barang dianggap "berangkat");
+// baru bertambah di lokasi tujuan setelah dikonfirmasi lewat receiveStockTransfer().
 export async function createStockTransfer(input: CreateTransferInput) {
   if (!input.items.length) throw new Error("Item transfer tidak boleh kosong");
+  if (input.fromPointId && input.fromPointId === input.toPointId) {
+    throw new Error("Lokasi asal dan tujuan tidak boleh sama");
+  }
 
   const itemsData = input.items.map((item) => {
     if (!item.productId || !item.qty || item.qty <= 0) {
@@ -27,20 +32,58 @@ export async function createStockTransfer(input: CreateTransferInput) {
   });
   const transferNumber = generateTransferNumber();
 
-  return prisma.stockTransfer.create({
-    data: {
-      transferNumber,
-      toPointId: input.toPointId,
-      notes: input.notes,
-      status: "SENT",
-      createdById: input.createdById,
-      items: { create: itemsData },
-    },
-    include: { items: { include: { product: true } }, toPoint: true },
+  return prisma.$transaction(async (tx: any) => {
+    if (input.fromPointId) {
+      for (const item of itemsData) {
+        const inv = await tx.inventory.findUnique({
+          where: { productId_pointId: { productId: item.productId, pointId: input.fromPointId } },
+        });
+        if (!inv || inv.stock < item.qty) {
+          throw new Error("Stok di lokasi asal tidak cukup untuk salah satu produk");
+        }
+      }
+    }
+
+    const transfer = await tx.stockTransfer.create({
+      data: {
+        transferNumber,
+        fromPointId: input.fromPointId,
+        toPointId: input.toPointId,
+        notes: input.notes,
+        status: "SENT",
+        createdById: input.createdById,
+        items: { create: itemsData },
+      },
+      include: { items: { include: { product: true } }, toPoint: true, fromPoint: true },
+    });
+
+    if (input.fromPointId) {
+      for (const item of itemsData) {
+        const inv = await tx.inventory.update({
+          where: { productId_pointId: { productId: item.productId, pointId: input.fromPointId } },
+          data: { stock: { decrement: item.qty } },
+        });
+        await tx.inventoryHistory.create({
+          data: {
+            inventoryId: inv.id,
+            type: "TRANSFER_OUT",
+            qty: item.qty,
+            note: `Kirim transfer stok ${transfer.transferNumber}`,
+            refId: transfer.id,
+            createdById: input.createdById,
+          },
+        });
+      }
+    }
+
+    return transfer;
+  }, {
+    maxWait: 10000,
+    timeout: 20000,
   });
 }
 
-// Point tujuan mengonfirmasi barang sudah benar-benar diterima: stok Point itu
+// Lokasi tujuan mengonfirmasi barang sudah benar-benar diterima: stok lokasi itu
 // bertambah, riwayat inventory dicatat, status jadi RECEIVED.
 export async function receiveStockTransfer(transferId: string, userId: string) {
   const transfer = await prisma.stockTransfer.findUnique({ where: { id: transferId }, include: { items: true } });
@@ -59,7 +102,7 @@ export async function receiveStockTransfer(transferId: string, userId: string) {
           inventoryId: inv.id,
           type: "TRANSFER_IN",
           qty: item.qty,
-          note: `Terima transfer stok ${transfer.transferNumber} dari Pusat`,
+          note: `Terima transfer stok ${transfer.transferNumber}`,
           refId: transfer.id,
           createdById: userId,
         },
@@ -79,16 +122,36 @@ export async function receiveStockTransfer(transferId: string, userId: string) {
 
   return prisma.stockTransfer.findUnique({
     where: { id: transferId },
-    include: { items: { include: { product: true } }, toPoint: true },
+    include: { items: { include: { product: true } }, toPoint: true, fromPoint: true },
   });
 }
 
 export async function cancelStockTransfer(transferId: string) {
-  const transfer = await prisma.stockTransfer.findUnique({ where: { id: transferId } });
+  const transfer = await prisma.stockTransfer.findUnique({ where: { id: transferId }, include: { items: true } });
   if (!transfer) throw new Error("Transfer stok tidak ditemukan");
   if (transfer.status !== "SENT") throw new Error("Hanya transfer berstatus SENT yang bisa dibatalkan");
 
-  return prisma.stockTransfer.update({ where: { id: transferId }, data: { status: "CANCELLED" } });
+  return prisma.$transaction(async (tx: any) => {
+    if (transfer.fromPointId) {
+      // Stok sudah dipotong dari lokasi asal saat SENT — kembalikan karena batal jadi dikirim.
+      for (const item of transfer.items) {
+        const inv = await tx.inventory.update({
+          where: { productId_pointId: { productId: item.productId, pointId: transfer.fromPointId! } },
+          data: { stock: { increment: item.qty } },
+        });
+        await tx.inventoryHistory.create({
+          data: {
+            inventoryId: inv.id,
+            type: "ADJUSTMENT",
+            qty: item.qty,
+            note: `Transfer ${transfer.transferNumber} dibatalkan, stok dikembalikan ke lokasi asal`,
+            refId: transfer.id,
+          },
+        });
+      }
+    }
+    return tx.stockTransfer.update({ where: { id: transferId }, data: { status: "CANCELLED" } });
+  });
 }
 
 function generateTransferNumber(): string {

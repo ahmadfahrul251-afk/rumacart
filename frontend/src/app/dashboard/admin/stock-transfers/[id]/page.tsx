@@ -16,6 +16,7 @@ function StockTransferDetailContent() {
   const { user } = useAuth();
   const isPusat = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
   const [transfer, setTransfer] = useState<StockTransfer | null>(null);
+  const canCancel = isPusat || (user?.role === "ADMIN_POINT" && transfer?.fromPointId === user?.managedPointId);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -69,7 +70,9 @@ function StockTransferDetailContent() {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">{transfer.transferNumber}</h1>
-          <p className="text-sm text-ink/60">Tujuan: {transfer.toPoint?.name}</p>
+          <p className="text-sm text-ink/60">
+            Dari: {transfer.fromPoint?.name || "Pusat"} → Tujuan: {transfer.toPoint?.name}
+          </p>
         </div>
         <Badge tone={transfer.status}>{transfer.status}</Badge>
       </div>
@@ -111,7 +114,7 @@ function StockTransferDetailContent() {
           >
             <PackageCheck size={16} /> Konfirmasi Diterima
           </button>
-          {isPusat && (
+          {canCancel && (
             <button
               onClick={handleCancel}
               disabled={busy}

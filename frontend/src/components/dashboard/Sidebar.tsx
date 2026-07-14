@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket, Users, ArrowRightLeft, Store } from "lucide-react";
+import { LayoutDashboard, Package, Boxes, Truck, ShoppingBag, Wallet, LogOut, Factory, ClipboardList, BadgeCheck, Ticket, Users, ArrowRightLeft, Store, PackagePlus } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
@@ -13,6 +13,8 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin/points", label: "Lokasi & Jaringan", icon: Store },
     { href: "/dashboard/admin/stock-transfers", label: "Transfer Stok", icon: ArrowRightLeft },
+    { href: "/dashboard/admin/restock-requests", label: "Restock Request", icon: PackagePlus },
+    { href: "/dashboard/admin/delivery-areas", label: "Area Pengiriman", icon: Truck },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
@@ -27,6 +29,8 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin/points", label: "Lokasi & Jaringan", icon: Store },
     { href: "/dashboard/admin/stock-transfers", label: "Transfer Stok", icon: ArrowRightLeft },
+    { href: "/dashboard/admin/restock-requests", label: "Restock Request", icon: PackagePlus },
+    { href: "/dashboard/admin/delivery-areas", label: "Area Pengiriman", icon: Truck },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
@@ -41,6 +45,8 @@ const LINKS: Record<string, { href: string; label: string; icon: any }[]> = {
     { href: "/dashboard/admin", label: "Order", icon: ShoppingBag },
     { href: "/dashboard/admin", label: "Inventory", icon: Package },
     { href: "/dashboard/admin/stock-transfers", label: "Transfer Stok", icon: ArrowRightLeft },
+    { href: "/dashboard/admin/restock-requests", label: "Restock Request", icon: PackagePlus },
+    { href: "/dashboard/admin/delivery-areas", label: "Area Pengiriman", icon: Truck },
     { href: "/dashboard/admin/suppliers", label: "Supplier", icon: Factory },
     { href: "/dashboard/admin/purchase-orders", label: "Purchase Order", icon: ClipboardList },
     { href: "/dashboard/admin/payment-verification", label: "Verifikasi Bayar", icon: BadgeCheck },
