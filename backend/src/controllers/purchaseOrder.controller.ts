@@ -7,6 +7,8 @@ import { scopedPointId, canAccessPoint } from "../utils/pointScope";
 // POST /api/purchase-orders  { supplierId, pointId, notes, items: [{productId, qty, costPrice}] }
 // Admin Point: pointId dari body diabaikan (dipaksa pakai Point-nya sendiri), dan
 // supplier yang dipilih harus kelihatan buat dia (pusat-wide atau lokal Point-nya).
+// Sesuai arsitektur Hub and Spoke: supplier cuma boleh kirim barang ke RDH — Mart/Point
+// dapat stoknya lewat Transfer Stok dari RDH, bukan PO langsung.
 export async function createPo(req: Request, res: Response) {
   try {
     const { supplierId, notes, items } = req.body;
@@ -14,7 +16,16 @@ export async function createPo(req: Request, res: Response) {
     if (req.user!.role === "ADMIN_POINT") {
       pointId = req.user!.managedPointId || undefined;
     }
-    if (!supplierId || !pointId) return fail(res, "Supplier dan Point tujuan wajib diisi", 422);
+    if (!supplierId || !pointId) return fail(res, "Supplier dan RDH tujuan wajib diisi", 422);
+
+    const targetLocation = await prisma.fulfillmentPoint.findUnique({ where: { id: pointId } });
+    if (!targetLocation || targetLocation.type !== "RDH") {
+      return fail(
+        res,
+        "Purchase Order cuma boleh dikirim ke RDH (RumaCart Distribution Hub). Mart/Point dapat stok lewat Transfer Stok dari RDH.",
+        400
+      );
+    }
 
     if (req.user!.role === "ADMIN_POINT") {
       const supplier = await prisma.supplier.findUnique({ where: { id: supplierId } });

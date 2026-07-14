@@ -47,15 +47,26 @@ export interface Review {
   user: { name: string };
 }
 
+// Jaringan distribusi RumaCart (Hub and Spoke):
+// RDH = gudang utama per kota (satu-satunya penerima Purchase Order dari supplier)
+// MART = outlet retail besar, POINT = pickup point/last-mile kecil.
+export type LocationType = "RDH" | "MART" | "POINT";
+
 export interface FulfillmentPoint {
   id: string;
   name: string;
   code: string;
+  type: LocationType;
   address: string;
   city: string;
   phone?: string | null;
   latitude: number;
   longitude: number;
+  serviceRadiusKm?: number | null;
+  operatingHours?: string | null;
+  isActive?: boolean;
+  parentHubId?: string | null;
+  parentHub?: { id: string; name: string; code: string } | null;
 }
 
 export interface EligiblePoint {
@@ -70,8 +81,10 @@ export interface PointMonitoring {
   id: string;
   name: string;
   code: string;
+  type: LocationType;
   city: string;
   isActive: boolean;
+  parentHubName: string | null;
   claimedProducts: number;
   totalStockQty: number;
   stockValue: number;
@@ -79,6 +92,13 @@ export interface PointMonitoring {
   outOfStockCount: number;
   orderCount: number;
   revenue: number;
+}
+
+export interface NetworkSummary {
+  totalCities: number;
+  totalRDH: number;
+  totalMart: number;
+  totalPoint: number;
 }
 
 export interface Address {
@@ -176,7 +196,7 @@ export interface User {
   phone?: string | null;
   role: Role;
   managedPointId?: string | null;
-  managedPoint?: { id: string; name: string; code: string } | null;
+  managedPoint?: { id: string; name: string; code: string; type: LocationType } | null;
   isActive?: boolean;
   createdAt?: string;
 }

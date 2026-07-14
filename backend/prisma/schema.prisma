@@ -15,11 +15,22 @@ datasource db {
 enum Role {
   SUPER_ADMIN
   ADMIN
-  ADMIN_POINT // Admin 1 Point/pickup point tertentu — data terkunci ke managedPointId
+  ADMIN_POINT // "Admin Lokasi" — kelola 1 lokasi (RDH/Mart/Point) tertentu, terkunci ke managedPointId
   KASIR
   GUDANG
   KURIR
   CUSTOMER
+}
+
+// Jaringan distribusi RumaCart (Hub and Spoke):
+// RDH   = RumaCart Distribution Hub, gudang utama 1 per kota, satu-satunya
+//         yang boleh terima Purchase Order langsung dari supplier.
+// MART  = RumaCart Mart, outlet retail skala besar, disuplai dari RDH kotanya.
+// POINT = RumaCart Point, pickup point/last-mile kecil, disuplai dari RDH/Mart.
+enum LocationType {
+  RDH
+  MART
+  POINT
 }
 
 enum OrderStatus {
@@ -228,16 +239,25 @@ model Review {
 // ================== FULFILLMENT POINT & INVENTORY ==================
 
 model FulfillmentPoint {
-  id        String   @id @default(cuid())
-  name      String   // "RumaCart Point A - Bandung Timur"
-  code      String   @unique // "PNT-A"
+  id        String       @id @default(cuid())
+  name      String       // "RumaCart Point A - Bandung Timur"
+  code      String       @unique // "PNT-A"
+  type      LocationType @default(POINT) // RDH / MART / POINT — lihat enum LocationType
   address   String
   city      String
   latitude  Float
   longitude Float
   phone     String?
+  serviceRadiusKm Float?  // radius layanan (km), dipakai nanti utk Smart Order Routing
+  operatingHours  String? // teks bebas, misal "08:00 - 21:00"
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  // Hierarki Hub and Spoke: Mart/Point disuplai oleh 1 RDH induk di kotanya.
+  // RDH sendiri tidak punya induk (parentHubId null).
+  parentHubId String?
+  parentHub   FulfillmentPoint?  @relation("HubSpokes", fields: [parentHubId], references: [id])
+  spokes      FulfillmentPoint[] @relation("HubSpokes")
 
   inventory Inventory[]
   orders    Order[]

@@ -186,9 +186,9 @@ function UsersContent() {
                   onChange={(e) => setForm({ ...form, managedPointId: e.target.value })}
                   className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
-                  <option value="">Pilih point</option>
+                  <option value="">Pilih lokasi</option>
                   {points.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
+                    <option key={p.id} value={p.id}>{p.name} ({p.code}) — {p.type}</option>
                   ))}
                 </select>
               </div>

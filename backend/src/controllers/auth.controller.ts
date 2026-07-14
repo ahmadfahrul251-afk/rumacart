@@ -64,8 +64,13 @@ export async function login(req: Request, res: Response) {
 }
 
 // GET /api/auth/me — cek user yang sedang login (dipakai frontend saat refresh halaman)
+// Sertakan managedPoint (termasuk `type`-nya) supaya frontend tahu Admin Lokasi ini
+// mengelola RDH/Mart/Point yang mana, dan bisa menyesuaikan menu & aksi yang tersedia.
 export async function me(req: Request, res: Response) {
-  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  const user = await prisma.user.findUnique({
+    where: { id: req.user!.userId },
+    include: { managedPoint: { select: { id: true, name: true, code: true, type: true } } },
+  });
   if (!user) return fail(res, "User tidak ditemukan", 404);
   return ok(res, sanitize(user));
 }

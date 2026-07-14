@@ -40,7 +40,7 @@ export async function listUsers(req: Request, res: Response) {
 
   const users = await prisma.user.findMany({
     where: { role: role ? (role as any) : { in: STAFF_ROLES as unknown as string[] } },
-    include: { managedPoint: { select: { id: true, name: true, code: true } } },
+    include: { managedPoint: { select: { id: true, name: true, code: true, type: true } } },
     orderBy: { createdAt: "desc" },
   });
   return ok(res, users.map(sanitize));
@@ -70,7 +70,7 @@ export async function createUser(req: Request, res: Response) {
       role,
       managedPointId: role === "ADMIN_POINT" ? managedPointId : null,
     },
-    include: { managedPoint: { select: { id: true, name: true, code: true } } },
+    include: { managedPoint: { select: { id: true, name: true, code: true, type: true } } },
   });
 
   return ok(res, sanitize(user), "Akun staff berhasil dibuat", 201);
@@ -119,7 +119,7 @@ export async function updateUser(req: Request, res: Response) {
   const user = await prisma.user.update({
     where: { id },
     data: updateData,
-    include: { managedPoint: { select: { id: true, name: true, code: true } } },
+    include: { managedPoint: { select: { id: true, name: true, code: true, type: true } } },
   });
 
   return ok(res, sanitize(user), "Akun staff berhasil diperbarui");

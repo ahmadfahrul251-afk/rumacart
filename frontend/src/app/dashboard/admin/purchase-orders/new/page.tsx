@@ -22,6 +22,7 @@ function NewPurchaseOrderContent() {
   const router = useRouter();
   const { user } = useAuth();
   const isAdminPoint = user?.role === "ADMIN_POINT";
+  const isNonRdhAdmin = isAdminPoint && user?.managedPoint && user.managedPoint.type !== "RDH";
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [points, setPoints] = useState<FulfillmentPoint[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -33,11 +34,13 @@ function NewPurchaseOrderContent() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Sesuai arsitektur Hub and Spoke: supplier cuma boleh kirim barang ke RDH,
+  // jadi dropdown Point tujuan cuma nampilin lokasi bertipe RDH.
   useEffect(() => {
     // GET /suppliers otomatis cuma balikin supplier pusat-wide + lokal Point-nya
     // sendiri kalau yang login Admin Point (dikunci di backend).
     api.get<Supplier[]>("/suppliers").then(setSuppliers).catch(() => setSuppliers([]));
-    api.get<FulfillmentPoint[]>("/points").then(setPoints).catch(() => setPoints([]));
+    api.get<FulfillmentPoint[]>("/points?type=RDH").then(setPoints).catch(() => setPoints([]));
     api
       .get<{ items: Product[] }>("/products?limit=100")
       .then((res) => setProducts(res.items))
@@ -94,6 +97,23 @@ function NewPurchaseOrderContent() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (isNonRdhAdmin) {
+    return (
+      <div className="flex-1 p-6">
+        <h1 className="mb-6 text-2xl font-bold">Buat Purchase Order</h1>
+        <div className="card max-w-xl">
+          <p className="text-sm text-ink/70">
+            Lokasi <strong>{user?.managedPoint?.name}</strong> bertipe {user?.managedPoint?.type === "MART" ? "Mart" : "Point"},
+            bukan RDH. Sesuai alur distribusi RumaCart, Purchase Order ke supplier cuma bisa dibuat oleh RDH.
+          </p>
+          <p className="mt-2 text-sm text-ink/70">
+            Untuk menambah stok di lokasi kamu, ajukan lewat menu <strong>Transfer Stok</strong> dari RDH yang mensuplai lokasi ini.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (

@@ -35,7 +35,11 @@ export async function listEligiblePoints(
   customerLon?: number | null,
   customerCity?: string | null
 ): Promise<EligiblePoint[]> {
-  const points = await prisma.fulfillmentPoint.findMany({ where: { isActive: true } });
+  // RDH adalah gudang murni (Hub) — tidak melayani customer langsung, jadi tidak
+  // pernah muncul sebagai pilihan checkout. Hanya Mart & Point yang customer-facing.
+  // (Urutan prioritas Point > Mart akan ditambahkan di Smart Order Routing berikutnya;
+  // untuk sekarang keduanya diurutkan campur berdasarkan jarak terdekat.)
+  const points = await prisma.fulfillmentPoint.findMany({ where: { isActive: true, type: { not: "RDH" } } });
   const eligible: EligiblePoint[] = [];
 
   for (const point of points) {
