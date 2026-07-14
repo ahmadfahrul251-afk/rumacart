@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Heart, Share2, MapPin, ShoppingCart } from "lucide-react";
+import { Heart, Share2, MapPin, ShoppingCart, BookmarkPlus, Check } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Badge } from "@/components/ui/Badge";
 import { StarRating } from "@/components/product/StarRating";
 import { ReviewSection } from "@/components/product/ReviewSection";
+import { PointPickerModal } from "@/components/product/PointPickerModal";
 import { api } from "@/lib/api";
 import { Product } from "@/types";
 import { formatRupiah, cn } from "@/lib/utils";
 import { useCart } from "@/lib/cart-context";
+import { usePlannedCart } from "@/lib/planned-cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
 
@@ -23,12 +25,14 @@ interface ProductDetail extends Omit<Product, "inventory"> {
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { addItem } = useCart();
+  const { addItem: addPlanned } = usePlannedCart();
   const { user } = useAuth();
   const { isWishlisted, toggle } = useWishlist();
   const router = useRouter();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [qty, setQty] = useState(1);
-  const [added, setAdded] = useState(false);
+  const [savedPlanned, setSavedPlanned] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   useEffect(() => {
     api.get<ProductDetail>(`/products/${slug}`).then(setProduct).catch(() => setProduct(null));
@@ -50,10 +54,10 @@ export default function ProductDetailPage() {
   const hasDiscount = !!product.discountPrice;
   const totalStock = product.inventory?.reduce((s, i) => s + i.stock, 0) ?? 0;
 
-  function handleAddToCart() {
-    addItem({ productId: product!.id, name: product!.name, price, image: product!.images?.[0], qty });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1500);
+  function handleSaveToPlanned() {
+    addPlanned({ productId: product!.id, name: product!.name, price, image: product!.images?.[0], qty });
+    setSavedPlanned(true);
+    setTimeout(() => setSavedPlanned(false), 1500);
   }
 
   function handleWishlistClick() {
@@ -118,8 +122,15 @@ export default function ProductDetailPage() {
                 <span className="w-8 text-center text-sm">{qty}</span>
                 <button className="px-3 py-2" onClick={() => setQty(qty + 1)}>+</button>
               </div>
-              <button onClick={handleAddToCart} disabled={totalStock === 0} className="btn-primary flex-1 disabled:opacity-40">
-                <ShoppingCart size={18} /> {added ? "Ditambahkan!" : "Tambah Keranjang"}
+              <button onClick={() => setShowPicker(true)} disabled={totalStock === 0} className="btn-primary flex-1 disabled:opacity-40">
+                <ShoppingCart size={18} /> Beli Sekarang
+              </button>
+              <button
+                onClick={handleSaveToPlanned}
+                title="Simpan ke Rencana Belanja"
+                className="rounded-xl border border-black/10 p-2.5 hover:bg-accent"
+              >
+                {savedPlanned ? <Check size={18} className="text-primary" /> : <BookmarkPlus size={18} />}
               </button>
               <button
                 onClick={handleWishlistClick}
@@ -139,6 +150,28 @@ export default function ProductDetailPage() {
         <ReviewSection productId={product.id} />
       </main>
       <Footer />
+
+      {showPicker && product && (
+        <PointPickerModal
+          productId={product.id}
+          productName={product.name}
+          qty={qty}
+          onClose={() => setShowPicker(false)}
+          onConfirm={(point) => {
+            addItem({
+              productId: product.id,
+              name: product.name,
+              price,
+              image: product.images?.[0],
+              qty,
+              pointId: point.pointId,
+              pointName: point.name,
+              pointCode: point.code,
+            });
+            setShowPicker(false);
+          }}
+        />
+      )}
     </>
   );
 }

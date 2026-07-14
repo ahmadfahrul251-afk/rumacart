@@ -14,6 +14,51 @@ export interface Inventory {
   pointId: string;
   stock: number;
   minStock: number;
+  maxStock?: number | null;
+  safetyStock?: number | null;
+}
+
+export type InventoryMoveType =
+  | "STOCK_IN"
+  | "STOCK_OUT"
+  | "TRANSFER_IN"
+  | "TRANSFER_OUT"
+  | "ADJUSTMENT"
+  | "SALE"
+  | "RETURN"
+  | "DAMAGE"
+  | "EXPIRED";
+
+export interface InventoryHistory {
+  id: string;
+  inventoryId: string;
+  type: InventoryMoveType;
+  qty: number;
+  note?: string | null;
+  refId?: string | null;
+  createdAt: string;
+  createdBy?: { name: string } | null;
+}
+
+export type RestockRequestStatus = "PENDING" | "APPROVED" | "REJECTED" | "FULFILLED";
+
+export interface RestockRequest {
+  id: string;
+  requestNumber: string;
+  pointId: string;
+  productId: string;
+  qty: number;
+  status: RestockRequestStatus;
+  sourceHubId?: string | null;
+  isAuto: boolean;
+  note?: string | null;
+  transferId?: string | null;
+  createdAt: string;
+  approvedAt?: string | null;
+  fulfilledAt?: string | null;
+  point?: FulfillmentPoint;
+  sourceHub?: FulfillmentPoint | null;
+  product?: Product;
 }
 
 export interface Product {
@@ -74,7 +119,9 @@ export interface EligiblePoint {
   name: string;
   code: string;
   city: string;
-  distance: number | null;
+  type?: "MART" | "POINT" | "RDH";
+  distance?: number | null;
+  isBackOrder?: boolean;
 }
 
 export interface PointMonitoring {
@@ -92,6 +139,7 @@ export interface PointMonitoring {
   outOfStockCount: number;
   orderCount: number;
   revenue: number;
+  profit: number;
 }
 
 export interface NetworkSummary {
@@ -99,6 +147,21 @@ export interface NetworkSummary {
   totalRDH: number;
   totalMart: number;
   totalPoint: number;
+  totalCustomers: number;
+  totalKurir: number;
+}
+
+export interface TopProduct {
+  productId: string;
+  name: string;
+  qtySold: number;
+  revenue: number;
+}
+
+export interface CitySales {
+  city: string;
+  orderCount: number;
+  revenue: number;
 }
 
 export interface Address {
@@ -161,6 +224,7 @@ export interface Order {
   total: number;
   costTotal: number;
   belowCost: boolean;
+  isBackOrder: boolean;
   createdAt: string;
   items: OrderItem[];
   point?: FulfillmentPoint;
@@ -251,6 +315,7 @@ export interface StockTransferItem {
 export interface StockTransfer {
   id: string;
   transferNumber: string;
+  fromPointId?: string | null;
   toPointId: string;
   status: StockTransferStatus;
   notes?: string | null;
@@ -258,6 +323,7 @@ export interface StockTransfer {
   receivedAt?: string | null;
   items: StockTransferItem[];
   toPoint?: FulfillmentPoint;
+  fromPoint?: FulfillmentPoint | null;
 }
 
 export type VoucherDiscountType = "FLAT" | "PERCENT";
@@ -290,10 +356,21 @@ export interface Notification {
   createdAt: string;
 }
 
+// Dipakai Keranjang Terencana (belum pilih Point, cuma daftar rencana belanja).
 export interface CartItem {
   productId: string;
   name: string;
   price: number;
   image?: string;
   qty: number;
+}
+
+// Dipakai Keranjang Beli Sekarang — Point dipilih per item saat "Tambah ke
+// Keranjang" (bukan pas checkout lagi). Karena tiap Order cuma bisa 1 Point,
+// keranjang ini bisa berisi campuran Point berbeda; checkout otomatis
+// memecahnya jadi beberapa pesanan (lihat app/checkout/page.tsx).
+export interface BuyNowItem extends CartItem {
+  pointId: string;
+  pointName: string;
+  pointCode: string;
 }

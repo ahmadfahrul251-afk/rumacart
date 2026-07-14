@@ -3,6 +3,7 @@ import { Poppins } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { CartProvider } from "@/lib/cart-context";
+import { PlannedCartProvider } from "@/lib/planned-cart-context";
 import { WishlistProvider } from "@/lib/wishlist-context";
 
 const poppins = Poppins({
@@ -23,7 +24,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${poppins.variable} font-sans`}>
         <AuthProvider>
           <CartProvider>
-            <WishlistProvider>{children}</WishlistProvider>
+            <PlannedCartProvider>
+              <WishlistProvider>{children}</WishlistProvider>
+            </PlannedCartProvider>
           </CartProvider>
         </AuthProvider>
       </body>

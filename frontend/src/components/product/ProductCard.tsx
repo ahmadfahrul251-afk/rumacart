@@ -1,16 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ShoppingCart, Heart } from "lucide-react";
+import { ShoppingCart, Heart, BookmarkPlus, Check } from "lucide-react";
 import { Product } from "@/types";
 import { formatRupiah, cn } from "@/lib/utils";
 import { useCart } from "@/lib/cart-context";
+import { usePlannedCart } from "@/lib/planned-cart-context";
 import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
+import { PointPickerModal } from "./PointPickerModal";
 
 export function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
+  const { addItem: addPlanned } = usePlannedCart();
   const { user } = useAuth();
   const { isWishlisted, toggle } = useWishlist();
   const router = useRouter();
@@ -18,6 +22,8 @@ export function ProductCard({ product }: { product: Product }) {
   const hasDiscount = !!product.discountPrice && product.discountPrice < product.sellPrice;
   const outOfStock = (product.totalStock ?? 1) <= 0;
   const wishlisted = isWishlisted(product.id);
+  const [showPicker, setShowPicker] = useState(false);
+  const [savedPlanned, setSavedPlanned] = useState(false);
 
   function handleWishlistClick(e: React.MouseEvent) {
     e.preventDefault(); // jangan ikut navigasi ke halaman detail produk
@@ -26,6 +32,13 @@ export function ProductCard({ product }: { product: Product }) {
       return;
     }
     toggle(product.id);
+  }
+
+  function handleSaveToPlanned(e: React.MouseEvent) {
+    e.preventDefault();
+    addPlanned({ productId: product.id, name: product.name, price, image: product.images?.[0], qty: 1 });
+    setSavedPlanned(true);
+    setTimeout(() => setSavedPlanned(false), 1500);
   }
 
   return (
@@ -67,16 +80,45 @@ export function ProductCard({ product }: { product: Product }) {
             <span className="text-xs text-ink/40 line-through">{formatRupiah(product.sellPrice)}</span>
           )}
         </div>
-        <button
-          disabled={outOfStock}
-          onClick={() =>
-            addItem({ productId: product.id, name: product.name, price, image: product.images?.[0], qty: 1 })
-          }
-          className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-primary-light py-2 text-xs font-medium text-primary transition hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <ShoppingCart size={14} /> Tambah
-        </button>
+        <div className="mt-2 flex items-center gap-1.5">
+          <button
+            disabled={outOfStock}
+            onClick={() => setShowPicker(true)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-light py-2 text-xs font-medium text-primary transition hover:bg-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ShoppingCart size={14} /> Beli Sekarang
+          </button>
+          <button
+            onClick={handleSaveToPlanned}
+            title="Simpan ke Rencana Belanja"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-accent text-ink/60 transition hover:bg-primary-light hover:text-primary"
+          >
+            {savedPlanned ? <Check size={14} /> : <BookmarkPlus size={14} />}
+          </button>
+        </div>
       </div>
+
+      {showPicker && (
+        <PointPickerModal
+          productId={product.id}
+          productName={product.name}
+          qty={1}
+          onClose={() => setShowPicker(false)}
+          onConfirm={(point) => {
+            addItem({
+              productId: product.id,
+              name: product.name,
+              price,
+              image: product.images?.[0],
+              qty: 1,
+              pointId: point.pointId,
+              pointName: point.name,
+              pointCode: point.code,
+            });
+            setShowPicker(false);
+          }}
+        />
+      )}
     </div>
   );
 }
