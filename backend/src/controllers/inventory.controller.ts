@@ -31,7 +31,9 @@ export async function inventoryStats(req: Request, res: Response) {
   // Hitung manual "stok menipis" (stock > 0 tapi <= minStock) karena Prisma
   // belum mendukung perbandingan antar kolom secara langsung di semua versi.
   const lowStockCount = allInventory.filter((i: any) => i.stock > 0 && i.stock <= i.minStock).length;
-  const inventoryValue = allInventory.reduce((sum: number, i: any) => sum + i.stock * i.product.costPrice, 0);
+  // Nilai inventaris dihitung dari basePrice (harga dasar/modal) tiap baris —
+  // basePrice bisa null kalau RDH belum pernah set harga (belum terima PO/klaim manual).
+  const inventoryValue = allInventory.reduce((sum: number, i: any) => sum + i.stock * (i.basePrice ?? 0), 0);
 
   return ok(res, {
     totalProducts,
@@ -140,13 +142,22 @@ export async function adjustment(req: Request, res: Response) {
   return ok(res, inventory, "Stok disesuaikan");
 }
 
-// POST /api/inventory/claim  { productId, pointId?, qty? }
+// POST /api/inventory/claim  { productId, pointId?, qty?, basePrice?, sellPrice?, discountPrice? }
 // Produk selalu diinput terpusat oleh Admin Pusat (lihat product.routes.ts).
 // Tiap Point "mengklaim" produk yang mau mereka jual — ini yang bikin produk
 // itu resmi jadi bagian inventaris Point tersebut. `qty` opsional: kalau diisi,
 // langsung jadi stok awal (tercatat di riwayat inventory); kalau tidak, klaim
 // dulu dengan stok 0 dan diisi belakangan lewat Transfer Stok / Purchase Order.
 // Klaim yang sudah ada tidak dianggap error.
+//
+// Harga bercabang menurut tipe lokasi:
+//   - RDH: wajib isi `basePrice` (harga dasar) — ini yang jadi acuan harga
+//     buat Mart/Point di bawahnya.
+//   - MART/POINT: wajib isi `sellPrice` (harga jual), `discountPrice` opsional.
+//     RDH induk (`parentHubId`) HARUS sudah klaim & set basePrice produk ini
+//     dulu — kalau belum, klaim ditolak. Kalau sellPrice di bawah basePrice
+//     RDH induk, klaim tetap boleh tapi responsnya membawa `belowBasePrice: true`
+//     sebagai tanda peringatan (tidak diblokir).
 export async function claimProduct(req: Request, res: Response) {
   const { productId, qty } = req.body;
   if (!productId) return fail(res, "Produk wajib dipilih", 422);
@@ -156,14 +167,39 @@ export async function claimProduct(req: Request, res: Response) {
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) return fail(res, "Produk tidak ditemukan", 404);
 
+  const point = await prisma.fulfillmentPoint.findUnique({ where: { id: pointId } });
+  if (!point) return fail(res, "Point tidak ditemukan", 404);
+
   const existing = await prisma.inventory.findUnique({
     where: { productId_pointId: { productId, pointId } },
   });
   if (existing) return ok(res, existing, "Produk ini sudah ada di inventaris Point kamu");
 
+  let priceData: any = {};
+  let belowBasePrice = false;
+
+  if (point.type === "RDH") {
+    const basePrice = Number(req.body.basePrice);
+    if (!basePrice || basePrice <= 0) return fail(res, "Harga dasar (basePrice) wajib diisi RDH saat klaim produk", 422);
+    priceData = { basePrice };
+  } else {
+    if (!point.parentHubId) return fail(res, "Point ini belum terhubung ke RDH induk, hubungi Admin Pusat", 422);
+    const parentInv = await prisma.inventory.findUnique({
+      where: { productId_pointId: { productId, pointId: point.parentHubId } },
+    });
+    if (!parentInv || parentInv.basePrice == null) {
+      return fail(res, "RDH induk belum mengklaim/menentukan harga dasar produk ini. Minta RDH klaim & atur harga dasar dulu", 422);
+    }
+    const sellPrice = Number(req.body.sellPrice);
+    if (!sellPrice || sellPrice <= 0) return fail(res, "Harga jual (sellPrice) wajib diisi", 422);
+    const discountPrice = req.body.discountPrice ? Number(req.body.discountPrice) : null;
+    belowBasePrice = sellPrice < parentInv.basePrice;
+    priceData = { basePrice: parentInv.basePrice, sellPrice, discountPrice };
+  }
+
   const initialStock = Math.max(Number(qty) || 0, 0);
   const inventory = await prisma.inventory.create({
-    data: { productId, pointId, stock: initialStock, minStock: product.minStock },
+    data: { productId, pointId, stock: initialStock, minStock: product.minStock, ...priceData },
     include: { product: true },
   });
 
@@ -179,7 +215,46 @@ export async function claimProduct(req: Request, res: Response) {
     });
   }
 
-  return ok(res, inventory, "Produk berhasil diklaim, sekarang jadi bagian inventaris Point kamu", 201);
+  return ok(res, { ...inventory, belowBasePrice }, "Produk berhasil diklaim, sekarang jadi bagian inventaris Point kamu", 201);
+}
+
+// PATCH /api/inventory/:id/price  { basePrice? } (RDH) atau { sellPrice?, discountPrice? } (Mart/Point)
+// "Atur Harga" — terpisah dari "Atur Stok" (updateThresholds). Sama seperti
+// klaim, field yang boleh diisi tergantung tipe lokasi pemilik baris inventaris.
+export async function updatePrice(req: Request, res: Response) {
+  const { id } = req.params;
+  const existing = await prisma.inventory.findUnique({ where: { id } });
+  if (!existing) return fail(res, "Data inventaris tidak ditemukan", 404);
+  if (!canAccessPoint(req, existing.pointId)) return fail(res, "Inventaris ini bukan milik lokasi kamu", 403);
+
+  const point = await prisma.fulfillmentPoint.findUnique({ where: { id: existing.pointId } });
+  if (!point) return fail(res, "Point tidak ditemukan", 404);
+
+  let belowBasePrice = false;
+  const data: any = {};
+
+  if (point.type === "RDH") {
+    if (req.body.basePrice == null) return fail(res, "basePrice wajib diisi", 422);
+    const basePrice = Number(req.body.basePrice);
+    if (!basePrice || basePrice <= 0) return fail(res, "basePrice tidak valid", 422);
+    data.basePrice = basePrice;
+  } else {
+    if (req.body.sellPrice != null) {
+      const sellPrice = Number(req.body.sellPrice);
+      if (!sellPrice || sellPrice <= 0) return fail(res, "sellPrice tidak valid", 422);
+      data.sellPrice = sellPrice;
+    }
+    if (req.body.discountPrice !== undefined) {
+      data.discountPrice = req.body.discountPrice === null ? null : Number(req.body.discountPrice);
+    }
+    const effectiveSellPrice = data.sellPrice ?? existing.sellPrice;
+    if (effectiveSellPrice != null && existing.basePrice != null) {
+      belowBasePrice = effectiveSellPrice < existing.basePrice;
+    }
+  }
+
+  const inventory = await prisma.inventory.update({ where: { id }, data, include: { product: true } });
+  return ok(res, { ...inventory, belowBasePrice }, "Harga diperbarui");
 }
 
 // PATCH /api/inventory/:id/thresholds  { minStock?, maxStock?, safetyStock? }

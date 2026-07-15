@@ -7,6 +7,7 @@ import {
   transferStock,
   adjustment,
   claimProduct,
+  updatePrice,
   updateThresholds,
   stockReturn,
   stockDamage,
@@ -29,6 +30,7 @@ router.post("/transfer", requireAuth, requireRole(...staffRoles), transferStock)
 router.post("/adjustment", requireAuth, requireRole(...pointRoles), adjustment);
 router.post("/claim", requireAuth, requireRole(...pointRoles), claimProduct);
 router.patch("/:id/thresholds", requireAuth, requireRole(...pointRoles), updateThresholds);
+router.patch("/:id/price", requireAuth, requireRole(...pointRoles), updatePrice);
 router.post("/return", requireAuth, requireRole(...pointRoles), stockReturn);
 router.post("/damage", requireAuth, requireRole(...pointRoles), stockDamage);
 router.post("/expired", requireAuth, requireRole(...pointRoles), stockExpired);

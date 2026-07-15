@@ -103,11 +103,19 @@ export default function PointDetailPage() {
 
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
           {!products && Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4]" />)}
-          {products?.map((p) =>
-            point ? (
-              <ProductCard key={p.id} product={p} fixedPoint={{ pointId: point.id, name: point.name, code: point.code }} />
-            ) : null
-          )}
+          {products?.map((p) => {
+            if (!point) return null;
+            const cp = p.currentPoint;
+            const price = cp?.discountPrice ?? cp?.sellPrice ?? cp?.basePrice;
+            if (price == null) return null; // belum diatur harga jualnya, jangan ditampilkan bisa dibeli
+            return (
+              <ProductCard
+                key={p.id}
+                product={p}
+                fixedPoint={{ pointId: point.id, name: point.name, code: point.code, price, originalPrice: cp?.discountPrice != null ? cp.sellPrice : null }}
+              />
+            );
+          })}
         </div>
 
         {products?.length === 0 && (

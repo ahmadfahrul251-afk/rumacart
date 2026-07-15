@@ -22,12 +22,6 @@ interface CreateOrderInput {
 export async function createOrder(input: CreateOrderInput) {
   if (!input.items.length) throw new Error("Keranjang kosong");
 
-  // 1. Ambil data produk & harga terbaru dari database (jangan percaya harga dari frontend).
-  const products = await prisma.product.findMany({
-    where: { id: { in: input.items.map((i) => i.productId) } },
-  });
-  const productMap = new Map(products.map((p: any) => [p.id, p]));
-
   // 2. Tentukan alamat customer (untuk cari Point terdekat + cek jangkauan kurir).
   let lat: number | null = null;
   let lon: number | null = null;
@@ -70,19 +64,31 @@ export async function createOrder(input: CreateOrderInput) {
     }
   }
 
-  // 4. Hitung subtotal berdasarkan harga di database (bukan dari client).
-  //    Sekaligus hitung total harga modal (costPrice) supaya bisa dipisahkan
-  //    dari keuntungan nanti, dan dipakai untuk deteksi "jual di bawah modal".
+  // 4. Hitung subtotal berdasarkan harga di database (bukan dari client) —
+  //    harga sekarang per LOKASI (Inventory), bukan lagi 1 harga global di
+  //    Product. Fallback discountPrice -> sellPrice -> basePrice: kasus normal
+  //    (Mart/Point) selalu punya sellPrice; kasus Back Order (RDH, lihat poin 3)
+  //    RDH cuma punya basePrice (tidak jual langsung ke customer), jadi dipakai
+  //    apa adanya sebagai harga darurat. Sekaligus hitung total harga modal
+  //    (basePrice) supaya bisa dipisahkan dari keuntungan nanti, dan dipakai
+  //    untuk deteksi "jual di bawah modal".
+  const inventoryRows = await prisma.inventory.findMany({
+    where: { pointId, productId: { in: input.items.map((i) => i.productId) } },
+  });
+  const invMap = new Map(inventoryRows.map((inv: any) => [inv.productId, inv]));
+
   let subtotal = 0;
   let costTotal = 0;
   const orderItemsData = input.items.map((line) => {
-    const product = productMap.get(line.productId);
-    if (!product) throw new Error(`Produk ${line.productId} tidak ditemukan`);
-    const price = product.discountPrice ?? product.sellPrice;
+    const inv: any = invMap.get(line.productId);
+    if (!inv) throw new Error(`Produk ${line.productId} tidak tersedia di lokasi ini`);
+    const price = inv.discountPrice ?? inv.sellPrice ?? inv.basePrice;
+    if (price == null) throw new Error(`Harga produk di lokasi ini belum diatur`);
+    const cost = inv.basePrice ?? 0;
     const lineSubtotal = price * line.qty;
     subtotal += lineSubtotal;
-    costTotal += product.costPrice * line.qty;
-    return { productId: product.id, qty: line.qty, price, subtotal: lineSubtotal };
+    costTotal += cost * line.qty;
+    return { productId: line.productId, qty: line.qty, price, subtotal: lineSubtotal };
   });
 
   // 5. Voucher (opsional, mendukung potongan flat maupun persen dengan batas maksimal).

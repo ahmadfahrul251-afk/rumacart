@@ -26,9 +26,10 @@ function NewProductContent() {
   const [sku, setSku] = useState("");
   const [barcode, setBarcode] = useState("");
   const [weightGram, setWeightGram] = useState(0);
-  const [costPrice, setCostPrice] = useState(0);
-  const [sellPrice, setSellPrice] = useState(0);
-  const [discountPrice, setDiscountPrice] = useState<number | "">("");
+  const [lengthCm, setLengthCm] = useState<number | "">("");
+  const [widthCm, setWidthCm] = useState<number | "">("");
+  const [heightCm, setHeightCm] = useState<number | "">("");
+  const [searchKeywords, setSearchKeywords] = useState("");
   const [minStock, setMinStock] = useState(5);
 
   useEffect(() => {
@@ -67,9 +68,10 @@ function NewProductContent() {
         sku,
         barcode: barcode || undefined,
         weightGram,
-        costPrice,
-        sellPrice,
-        discountPrice: discountPrice === "" ? undefined : discountPrice,
+        lengthCm: lengthCm === "" ? undefined : lengthCm,
+        widthCm: widthCm === "" ? undefined : widthCm,
+        heightCm: heightCm === "" ? undefined : heightCm,
+        searchKeywords: searchKeywords || undefined,
         minStock,
         images: image ? [image] : [],
       });
@@ -88,8 +90,9 @@ function NewProductContent() {
       </button>
       <h1 className="mb-6 text-2xl font-bold">Tambah Produk</h1>
       <p className="mb-6 max-w-2xl text-sm text-ink/50">
-        Produk baru masuk ke katalog pusat. Tiap Point yang mau menjualnya perlu "klaim" produk ini dulu di
-        halaman Produk supaya masuk ke inventaris mereka.
+        Produk baru masuk ke katalog pusat (tanpa harga). Tiap RDH/Mart/Point yang mau menjualnya perlu
+        "klaim" produk ini dulu di halaman Produk mereka masing-masing — harga dasar (RDH) atau harga
+        jual (Mart/Point) diatur saat klaim.
       </p>
 
       <form onSubmit={handleSubmit} className="grid gap-6 md:grid-cols-3">
@@ -161,23 +164,26 @@ function NewProductContent() {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium">Harga Modal *</label>
-              <Input type="number" min={0} value={costPrice} onChange={(e) => setCostPrice(Number(e.target.value))} />
+              <label className="mb-1 block text-sm font-medium">Panjang (cm)</label>
+              <Input type="number" min={0} value={lengthCm} onChange={(e) => setLengthCm(e.target.value ? Number(e.target.value) : "")} placeholder="Opsional" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Harga Jual *</label>
-              <Input type="number" min={0} value={sellPrice} onChange={(e) => setSellPrice(Number(e.target.value))} />
+              <label className="mb-1 block text-sm font-medium">Lebar (cm)</label>
+              <Input type="number" min={0} value={widthCm} onChange={(e) => setWidthCm(e.target.value ? Number(e.target.value) : "")} placeholder="Opsional" />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Harga Diskon</label>
-              <Input
-                type="number"
-                min={0}
-                value={discountPrice}
-                onChange={(e) => setDiscountPrice(e.target.value ? Number(e.target.value) : "")}
-                placeholder="Opsional"
-              />
+              <label className="mb-1 block text-sm font-medium">Tinggi (cm)</label>
+              <Input type="number" min={0} value={heightCm} onChange={(e) => setHeightCm(e.target.value ? Number(e.target.value) : "")} placeholder="Opsional" />
             </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Kata Kunci Pencarian</label>
+            <Input
+              value={searchKeywords}
+              onChange={(e) => setSearchKeywords(e.target.value)}
+              placeholder="Pisahkan koma, contoh: mie instan, pedas, rendang"
+            />
+            <p className="mt-1 text-xs text-ink/40">Membantu customer menemukan produk ini lewat pencarian.</p>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}

@@ -16,6 +16,13 @@ export interface Inventory {
   minStock: number;
   maxStock?: number | null;
   safetyStock?: number | null;
+  // Harga per lokasi — basePrice cuma diatur RDH, sellPrice/discountPrice
+  // cuma diatur Mart/Point. Lihat komentar di schema.prisma model Inventory.
+  basePrice?: number | null;
+  sellPrice?: number | null;
+  discountPrice?: number | null;
+  point?: FulfillmentPoint;
+  product?: Product;
 }
 
 export type InventoryMoveType =
@@ -71,14 +78,23 @@ export interface Product {
   sku: string;
   barcode?: string | null;
   weightGram: number;
-  costPrice: number;
-  sellPrice: number;
-  discountPrice?: number | null;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+  searchKeywords?: string | null;
   minStock?: number;
   images: string[];
   category?: Category;
   inventory?: Inventory[];
   totalStock?: number;
+  // Rentang harga lintas lokasi (dihitung backend dari Inventory.sellPrice/
+  // discountPrice tiap lokasi yang sudah klaim & atur harga) — null kalau
+  // belum ada satupun Mart/Point yang klaim+atur harga produk ini.
+  priceMin?: number | null;
+  priceMax?: number | null;
+  // Cuma terisi kalau request-nya point-scoped (?pointId= atau lewat
+  // /points/:id/products) — harga & stok spesifik 1 lokasi itu.
+  currentPoint?: { pointId: string; stock: number; basePrice: number | null; sellPrice: number | null; discountPrice: number | null } | null;
   avgRating?: number;
   totalReviews?: number;
 }
@@ -122,6 +138,10 @@ export interface EligiblePoint {
   type?: "MART" | "POINT" | "RDH";
   distance?: number | null;
   isBackOrder?: boolean;
+  // Cuma terisi kalau keranjang 1 produk (lihat point.controller.ts#eligiblePoints) —
+  // harga produk itu di lokasi ini, buat dibandingkan sebelum customer pilih lokasi.
+  price?: number | null;
+  originalPrice?: number | null;
 }
 
 export interface PointMonitoring {
@@ -304,7 +324,7 @@ export interface User {
   phone?: string | null;
   role: Role;
   managedPointId?: string | null;
-  managedPoint?: { id: string; name: string; code: string; type: LocationType } | null;
+  managedPoint?: { id: string; name: string; code: string; type: LocationType; parentHubId?: string | null } | null;
   isActive?: boolean;
   createdAt?: string;
 }

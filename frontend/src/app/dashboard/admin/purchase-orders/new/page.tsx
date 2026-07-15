@@ -66,7 +66,10 @@ function NewPurchaseOrderContent() {
 
   function handleProductChange(index: number, productId: string) {
     const product = products.find((p) => p.id === productId);
-    updateItem(index, { productId, costPrice: product?.costPrice ?? 0 });
+    // Saran harga beli: pakai basePrice (harga dasar) RDH tujuan yang sudah
+    // pernah diklaim/di-set sebelumnya — bukan lagi 1 harga global di Product.
+    const suggestedCost = product?.inventory?.find((inv) => inv.pointId === pointId)?.basePrice ?? 0;
+    updateItem(index, { productId, costPrice: suggestedCost });
   }
 
   const total = items.reduce((sum, row) => sum + row.qty * row.costPrice, 0);

@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { Product } from "@/types";
-import { formatRupiah } from "@/lib/utils";
 
 function EditProductContent() {
   const { slug } = useParams<{ slug: string }>();
@@ -57,9 +56,10 @@ function EditProductContent() {
         name: product.name,
         description: product.description,
         barcode: product.barcode || null,
-        costPrice: product.costPrice,
-        sellPrice: product.sellPrice,
-        discountPrice: product.discountPrice || null,
+        lengthCm: product.lengthCm || null,
+        widthCm: product.widthCm || null,
+        heightCm: product.heightCm || null,
+        searchKeywords: product.searchKeywords || null,
         images: product.images,
       });
       setSuccess("Perubahan tersimpan.");
@@ -139,48 +139,44 @@ function EditProductContent() {
               <p className="mt-1 text-xs text-ink/40">Dipakai untuk scan cepat di halaman Kasir (POS).</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1 block text-sm font-medium">Harga Modal (Dasar)</label>
+              <label className="mb-1 block text-sm font-medium">Panjang (cm)</label>
               <Input
                 type="number"
-                value={product.costPrice}
-                onChange={(e) => setProduct({ ...product, costPrice: Number(e.target.value) })}
-              />
-              <p className="mt-1 text-xs text-ink/40">Tidak terlihat customer. Dipakai untuk hitung untung & jaga cash bisnis.</p>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Harga Jual</label>
-              <Input
-                type="number"
-                value={product.sellPrice}
-                onChange={(e) => setProduct({ ...product, sellPrice: Number(e.target.value) })}
+                value={product.lengthCm ?? ""}
+                onChange={(e) => setProduct({ ...product, lengthCm: e.target.value ? Number(e.target.value) : null })}
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Harga Diskon (opsional)</label>
+              <label className="mb-1 block text-sm font-medium">Lebar (cm)</label>
               <Input
                 type="number"
-                value={product.discountPrice ?? ""}
-                onChange={(e) =>
-                  setProduct({ ...product, discountPrice: e.target.value ? Number(e.target.value) : null })
-                }
+                value={product.widthCm ?? ""}
+                onChange={(e) => setProduct({ ...product, widthCm: e.target.value ? Number(e.target.value) : null })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Tinggi (cm)</label>
+              <Input
+                type="number"
+                value={product.heightCm ?? ""}
+                onChange={(e) => setProduct({ ...product, heightCm: e.target.value ? Number(e.target.value) : null })}
               />
             </div>
           </div>
-
-          {(() => {
-            const effectivePrice = product.discountPrice || product.sellPrice;
-            const margin = effectivePrice - product.costPrice;
-            if (!product.costPrice) return null;
-            return (
-              <p className={`text-sm font-medium ${margin < 0 ? "text-red-600" : "text-primary"}`}>
-                {margin < 0
-                  ? `⚠️ Harga jual saat ini di bawah modal (rugi ${formatRupiah(Math.abs(margin))} per item)`
-                  : `Estimasi untung per item: ${formatRupiah(margin)}`}
-              </p>
-            );
-          })()}
+          <div>
+            <label className="mb-1 block text-sm font-medium">Kata Kunci Pencarian</label>
+            <Input
+              value={product.searchKeywords ?? ""}
+              onChange={(e) => setProduct({ ...product, searchKeywords: e.target.value || null })}
+              placeholder="Pisahkan koma, contoh: mie instan, pedas, rendang"
+            />
+          </div>
+          <p className="text-xs text-ink/40">
+            Harga (harga dasar/RDH & harga jual/Mart-Point) sekarang diatur per lokasi lewat halaman
+            "Produk" di dashboard tiap lokasi, bukan di sini lagi.
+          </p>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
           {success && <p className="text-sm text-primary">{success}</p>}

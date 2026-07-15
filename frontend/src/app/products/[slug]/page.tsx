@@ -19,7 +19,13 @@ import { useAuth } from "@/lib/auth-context";
 import { useWishlist } from "@/lib/wishlist-context";
 
 interface ProductDetail extends Omit<Product, "inventory"> {
-  inventory: { stock: number; point: { name: string; city: string } }[];
+  inventory: {
+    stock: number;
+    basePrice: number | null;
+    sellPrice: number | null;
+    discountPrice: number | null;
+    point: { name: string; city: string; type: string };
+  }[];
 }
 
 export default function ProductDetailPage() {
@@ -50,12 +56,11 @@ export default function ProductDetailPage() {
     );
   }
 
-  const price = product.discountPrice ?? product.sellPrice;
-  const hasDiscount = !!product.discountPrice;
+  const isRange = product.priceMin != null && product.priceMax != null && product.priceMin !== product.priceMax;
   const totalStock = product.inventory?.reduce((s, i) => s + i.stock, 0) ?? 0;
 
   function handleSaveToPlanned() {
-    addPlanned({ productId: product!.id, name: product!.name, price, image: product!.images?.[0], qty });
+    addPlanned({ productId: product!.id, name: product!.name, price: product!.priceMin ?? 0, image: product!.images?.[0], qty });
     setSavedPlanned(true);
     setTimeout(() => setSavedPlanned(false), 1500);
   }
@@ -94,12 +99,22 @@ export default function ProductDetailPage() {
             )}
 
             <div className="mt-3 flex items-baseline gap-3">
-              <span className="text-2xl font-bold text-primary">{formatRupiah(price)}</span>
-              {hasDiscount && <span className="text-ink/40 line-through">{formatRupiah(product.sellPrice)}</span>}
+              {product.priceMin == null ? (
+                <span className="text-sm text-ink/40">Harga belum tersedia</span>
+              ) : isRange ? (
+                <span className="text-2xl font-bold text-primary">
+                  {formatRupiah(product.priceMin!)} – {formatRupiah(product.priceMax!)}
+                </span>
+              ) : (
+                <span className="text-2xl font-bold text-primary">{formatRupiah(product.priceMin!)}</span>
+              )}
             </div>
 
             <p className="mt-2 text-sm text-ink/60">
               Stok tersedia: <span className="font-medium text-ink">{totalStock}</span> · Berat: {product.weightGram}g
+              {(product.lengthCm || product.widthCm || product.heightCm) && (
+                <> · Dimensi: {product.lengthCm ?? "-"}×{product.widthCm ?? "-"}×{product.heightCm ?? "-"} cm</>
+              )}
             </p>
 
             <p className="mt-4 text-sm leading-relaxed text-ink/70">{product.description}</p>
@@ -107,11 +122,14 @@ export default function ProductDetailPage() {
             <div className="mt-4 space-y-1">
               <p className="flex items-center gap-1.5 text-sm font-medium"><MapPin size={14} /> Tersedia di Point:</p>
               <div className="flex flex-wrap gap-2">
-                {product.inventory?.filter((i) => i.stock > 0).map((i, idx) => (
-                  <span key={idx} className="rounded-full bg-accent px-3 py-1 text-xs">
-                    {i.point.name} ({i.stock})
-                  </span>
-                ))}
+                {product.inventory?.filter((i) => i.stock > 0 && i.point.type !== "RDH").map((i, idx) => {
+                  const p = i.discountPrice ?? i.sellPrice;
+                  return (
+                    <span key={idx} className="rounded-full bg-accent px-3 py-1 text-xs">
+                      {i.point.name} ({i.stock}){p != null && <> · {formatRupiah(p)}</>}
+                    </span>
+                  );
+                })}
                 {totalStock === 0 && <span className="text-xs text-red-600">Stok habis di semua Point</span>}
               </div>
             </div>
@@ -161,7 +179,7 @@ export default function ProductDetailPage() {
             addItem({
               productId: product.id,
               name: product.name,
-              price,
+              price: point.price ?? product.priceMin ?? 0,
               image: product.images?.[0],
               qty,
               pointId: point.pointId,

@@ -54,10 +54,12 @@ export async function receivePurchaseOrder(poId: string, userId: string) {
 
   await prisma.$transaction(async (tx: any) => {
     for (const item of po.items) {
+      // Terima PO otomatis set/refresh basePrice (harga dasar) RDH tujuan —
+      // "last cost wins", sesuai harga beli terbaru dari supplier di baris PO ini.
       const inv = await tx.inventory.upsert({
         where: { productId_pointId: { productId: item.productId, pointId: po.pointId } },
-        update: { stock: { increment: item.qty } },
-        create: { productId: item.productId, pointId: po.pointId, stock: item.qty },
+        update: { stock: { increment: item.qty }, basePrice: item.costPrice },
+        create: { productId: item.productId, pointId: po.pointId, stock: item.qty, basePrice: item.costPrice },
       });
       await tx.inventoryHistory.create({
         data: {

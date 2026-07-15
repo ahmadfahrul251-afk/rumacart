@@ -16,8 +16,9 @@ interface Props {
   product: Product;
   // Kalau diisi (dipanggil dari halaman detail Point, lihat app/points/[id]/page.tsx),
   // "Beli Sekarang" LANGSUNG masuk keranjang Point ini, tanpa buka PointPickerModal —
-  // soalnya customer memang lagi browsing di dalam konteks Point tersebut.
-  fixedPoint?: { pointId: string; name: string; code: string };
+  // soalnya customer memang lagi browsing di dalam konteks Point tersebut. `price` wajib
+  // diisi di sini karena harga sekarang per-lokasi (bukan lagi 1 harga global di Product).
+  fixedPoint?: { pointId: string; name: string; code: string; price: number; originalPrice?: number | null };
 }
 
 export function ProductCard({ product, fixedPoint }: Props) {
@@ -26,8 +27,15 @@ export function ProductCard({ product, fixedPoint }: Props) {
   const { user } = useAuth();
   const { isWishlisted, toggle } = useWishlist();
   const router = useRouter();
-  const price = product.discountPrice ?? product.sellPrice;
-  const hasDiscount = !!product.discountPrice && product.discountPrice < product.sellPrice;
+
+  // Harga tampilan: kalau fixedPoint ada, pakai harga pasti di lokasi itu. Kalau
+  // browsing katalog umum (belum pilih lokasi), tampilkan RENTANG harga
+  // (priceMin-priceMax) dari semua lokasi yang sudah klaim & atur harga.
+  const displayPrice = fixedPoint?.price ?? product.priceMin ?? null;
+  const hasDiscount = fixedPoint
+    ? fixedPoint.originalPrice != null && fixedPoint.originalPrice > fixedPoint.price
+    : false;
+  const isRange = !fixedPoint && product.priceMin != null && product.priceMax != null && product.priceMin !== product.priceMax;
   const outOfStock = (product.totalStock ?? 1) <= 0;
   const wishlisted = isWishlisted(product.id);
   const [showPicker, setShowPicker] = useState(false);
@@ -44,7 +52,13 @@ export function ProductCard({ product, fixedPoint }: Props) {
 
   function handleSaveToPlanned(e: React.MouseEvent) {
     e.preventDefault();
-    addPlanned({ productId: product.id, name: product.name, price, image: product.images?.[0], qty: 1 });
+    addPlanned({
+      productId: product.id,
+      name: product.name,
+      price: fixedPoint?.price ?? product.priceMin ?? 0,
+      image: product.images?.[0],
+      qty: 1,
+    });
     setSavedPlanned(true);
     setTimeout(() => setSavedPlanned(false), 1500);
   }
@@ -83,20 +97,30 @@ export function ProductCard({ product, fixedPoint }: Props) {
           <p className="line-clamp-2 min-h-[2.5rem] text-sm font-medium">{product.name}</p>
         </Link>
         <div className="flex items-baseline gap-2">
-          <span className="font-semibold text-primary">{formatRupiah(price)}</span>
-          {hasDiscount && (
-            <span className="text-xs text-ink/40 line-through">{formatRupiah(product.sellPrice)}</span>
+          {displayPrice == null ? (
+            <span className="text-sm text-ink/40">Harga belum tersedia</span>
+          ) : isRange ? (
+            <span className="font-semibold text-primary">
+              {formatRupiah(product.priceMin!)} – {formatRupiah(product.priceMax!)}
+            </span>
+          ) : (
+            <>
+              <span className="font-semibold text-primary">{formatRupiah(displayPrice)}</span>
+              {hasDiscount && (
+                <span className="text-xs text-ink/40 line-through">{formatRupiah(fixedPoint!.originalPrice!)}</span>
+              )}
+            </>
           )}
         </div>
         <div className="mt-2 flex items-center gap-1.5">
           <button
-            disabled={outOfStock}
+            disabled={outOfStock || displayPrice == null}
             onClick={() => {
               if (fixedPoint) {
                 addItem({
                   productId: product.id,
                   name: product.name,
-                  price,
+                  price: fixedPoint.price,
                   image: product.images?.[0],
                   qty: 1,
                   pointId: fixedPoint.pointId,
@@ -131,7 +155,7 @@ export function ProductCard({ product, fixedPoint }: Props) {
             addItem({
               productId: product.id,
               name: product.name,
-              price,
+              price: point.price ?? product.priceMin ?? 0,
               image: product.images?.[0],
               qty: 1,
               pointId: point.pointId,

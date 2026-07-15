@@ -5,12 +5,13 @@ import { MapPin, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Address, EligiblePoint } from "@/types";
+import { formatRupiah } from "@/lib/utils";
 
 interface Props {
   productName: string;
   productId: string;
   qty: number;
-  onConfirm: (point: { pointId: string; name: string; code: string }) => void;
+  onConfirm: (point: { pointId: string; name: string; code: string; price?: number | null }) => void;
   onClose: () => void;
 }
 
@@ -66,7 +67,7 @@ export function PointPickerModal({ productName, productId, qty, onConfirm, onClo
   function handleConfirm() {
     const point = points?.find((p) => p.pointId === selected);
     if (!point) return;
-    onConfirm({ pointId: point.pointId, name: point.name, code: point.code });
+    onConfirm({ pointId: point.pointId, name: point.name, code: point.code, price: point.price });
   }
 
   return (
@@ -112,6 +113,16 @@ export function PointPickerModal({ productName, productId, qty, onConfirm, onClo
                     <MapPin size={12} /> {p.city}
                     {p.distance != null && <span> · {p.distance.toFixed(1)} km</span>}
                   </p>
+                  {p.price != null && (
+                    <p className="mt-0.5 font-semibold text-primary">
+                      {formatRupiah(p.price)}
+                      {p.originalPrice != null && p.originalPrice > p.price && (
+                        <span className="ml-1.5 text-xs font-normal text-ink/40 line-through">
+                          {formatRupiah(p.originalPrice)}
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
               </label>
             ))}

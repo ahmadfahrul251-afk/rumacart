@@ -196,9 +196,10 @@ model Product {
   sku           String   @unique
   barcode       String?  @unique
   weightGram    Int      @default(0)
-  costPrice     Int      // harga modal, dalam Rupiah (integer, tanpa desimal)
-  sellPrice     Int      // harga jual
-  discountPrice Int?     // harga setelah diskon, jika ada
+  lengthCm      Float?   // dimensi paket, dipakai estimasi ongkir/packing
+  widthCm       Float?
+  heightCm      Float?
+  searchKeywords String? // kata kunci tambahan (dipisah koma) biar gampang ditemukan pencarian, contoh "mie instan pedas rendang"
   minStock      Int      @default(5)
   images        String[] @default([])
   isActive      Boolean  @default(true)
@@ -312,6 +313,18 @@ model Inventory {
   minStock  Int      @default(5)
   maxStock    Int?   // batas atas stok "ideal" di lokasi ini — dipakai hitung jumlah Restock Request
   safetyStock Int?   // cadangan minimum yang tidak boleh disentuh kecuali darurat (opsional, buat referensi Admin)
+
+  // ====== HARGA (per lokasi, bukan lagi 1 harga global di Product) ======
+  // basePrice: "Harga Dasar" — CUMA diisi & diubah oleh Admin Lokasi RDH.
+  //   Buat Mart/Point, nilai ini disalin dari basePrice RDH induk pas klaim
+  //   (snapshot), dipakai sebagai acuan modal/referensi "jual di bawah harga dasar".
+  // sellPrice/discountPrice: harga jual ke customer — CUMA diisi & diubah oleh
+  //   Admin Lokasi Mart/Point (tidak relevan buat RDH, karena RDH tidak jual
+  //   langsung ke customer).
+  basePrice     Int?
+  sellPrice     Int?
+  discountPrice Int?
+
   updatedAt DateTime @updatedAt
 
   product Product          @relation(fields: [productId], references: [id])

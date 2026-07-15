@@ -120,7 +120,18 @@ export async function getPointProducts(req: Request, res: Response) {
     prisma.product.count({ where }),
   ]);
 
-  const data = items.map((p: any) => ({ ...p, totalStock: p.inventory[0]?.stock ?? 0 }));
+  // Bentuk response disamakan dengan withStockSummary() di product.controller.ts
+  // (field `currentPoint`) supaya frontend cukup pakai 1 bentuk Product yang sama.
+  const data = items.map((p: any) => {
+    const inv = p.inventory[0];
+    return {
+      ...p,
+      totalStock: inv?.stock ?? 0,
+      currentPoint: inv
+        ? { pointId: inv.pointId, stock: inv.stock, basePrice: inv.basePrice, sellPrice: inv.sellPrice, discountPrice: inv.discountPrice }
+        : null,
+    };
+  });
   return ok(res, { items: data, total, page: Number(page), totalPages: Math.ceil(total / take), point });
 }
 
@@ -229,6 +240,26 @@ export async function eligiblePoints(req: Request, res: Response) {
     const backOrder = await findBackOrderOption(items, lat, lon, city);
     if (backOrder) return ok(res, [backOrder]);
   }
+
+  // Kalau keranjang cuma 1 produk (kasus paling umum — dipakai PointPickerModal
+  // dari tombol "Beli Sekarang"), lampirkan harga per-Point supaya customer bisa
+  // bandingkan harga sebelum pilih lokasi. Tidak dilakukan untuk cart multi-item
+  // karena "1 harga per Point" jadi ambigu (harga produk mana yang ditampilkan).
+  if (items.length === 1 && points.length > 0) {
+    const productId = items[0].productId;
+    const inventoryRows = await prisma.inventory.findMany({
+      where: { productId, pointId: { in: points.map((p) => p.pointId) } },
+    });
+    const invMap = new Map(inventoryRows.map((inv: any) => [inv.pointId, inv]));
+    const enriched = points.map((p) => {
+      const inv: any = invMap.get(p.pointId);
+      const price = inv?.discountPrice ?? inv?.sellPrice ?? inv?.basePrice ?? null;
+      const originalPrice = inv?.discountPrice != null ? inv?.sellPrice ?? null : null;
+      return { ...p, price, originalPrice };
+    });
+    return ok(res, enriched);
+  }
+
   return ok(res, points);
 }
 
@@ -278,7 +309,7 @@ export async function pointsMonitoring(req: Request, res: Response) {
   const data = points.map((p: any) => {
     const claimedProducts = p.inventory.length;
     const totalStockQty = p.inventory.reduce((sum: number, inv: any) => sum + inv.stock, 0);
-    const stockValue = p.inventory.reduce((sum: number, inv: any) => sum + inv.stock * inv.product.costPrice, 0);
+    const stockValue = p.inventory.reduce((sum: number, inv: any) => sum + inv.stock * (inv.basePrice ?? 0), 0);
     const lowStockCount = p.inventory.filter((inv: any) => inv.stock > 0 && inv.stock <= inv.minStock).length;
     const outOfStockCount = p.inventory.filter((inv: any) => inv.stock === 0).length;
     const sales = salesMap.get(p.id);

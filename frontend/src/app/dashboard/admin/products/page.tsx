@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, PackageCheck, Loader2, History, X } from "lucide-react";
+import { Pencil, Plus, PackageCheck, Loader2, History, X, Tag, AlertTriangle } from "lucide-react";
 import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/Input";
@@ -48,11 +48,20 @@ function AdminProductsContent() {
   const [claimFilter, setClaimFilter] = useState<"ALL" | "UNCLAIMED" | "CLAIMED">("ALL");
   const [claimRowId, setClaimRowId] = useState(""); // baris yang lagi buka form klaim
   const [claimQty, setClaimQty] = useState("");
+  const [claimBasePrice, setClaimBasePrice] = useState(""); // dipakai kalau lokasi ini RDH
+  const [claimSellPrice, setClaimSellPrice] = useState(""); // dipakai kalau lokasi ini Mart/Point
+  const [claimDiscountPrice, setClaimDiscountPrice] = useState("");
   const [claiming, setClaiming] = useState(false);
   const [thresholdRowId, setThresholdRowId] = useState(""); // baris yang lagi atur min/max/safety stock
   const [thresholdForm, setThresholdForm] = useState({ minStock: "", maxStock: "", safetyStock: "" });
   const [savingThreshold, setSavingThreshold] = useState(false);
+  const [priceRowId, setPriceRowId] = useState(""); // baris yang lagi atur harga (terpisah dari Atur Stok)
+  const [priceForm, setPriceForm] = useState({ basePrice: "", sellPrice: "", discountPrice: "" });
+  const [savingPrice, setSavingPrice] = useState(false);
   const [error, setError] = useState("");
+
+  const pointType = user?.managedPoint?.type; // RDH / MART / POINT — punya Admin Point ini
+  const isRDHAdmin = isAdminPoint && pointType === "RDH";
 
   // Modal Riwayat Stok — juga tempat catat Retur/Rusak/Kadaluarsa
   const [historyInv, setHistoryInv] = useState<{ id: string; productId: string; productName: string } | null>(null);
@@ -79,6 +88,14 @@ function AdminProductsContent() {
     return isAdminPoint ? p.inventory?.find((inv) => inv.pointId === user?.managedPointId) : undefined;
   }
 
+  // Referensi harga dasar dari RDH induk — dipakai buat validasi & tampilan
+  // "jangan di bawah harga ini" saat Mart/Point klaim/atur harga jual.
+  function parentInventoryOf(p: Product) {
+    const parentId = user?.managedPoint?.parentHubId;
+    if (!parentId) return undefined;
+    return p.inventory?.find((inv) => inv.pointId === parentId);
+  }
+
   const visibleProducts =
     isAdminPoint && claimFilter !== "ALL"
       ? products?.filter((p) => (claimFilter === "CLAIMED" ? !!myInventoryOf(p) : !myInventoryOf(p)))
@@ -88,13 +105,33 @@ function AdminProductsContent() {
     setError("");
     setClaimRowId(productId);
     setClaimQty("");
+    setClaimBasePrice("");
+    setClaimSellPrice("");
+    setClaimDiscountPrice("");
   }
 
   async function handleClaim(productId: string) {
     setError("");
+    if (isRDHAdmin) {
+      if (!claimBasePrice || Number(claimBasePrice) <= 0) {
+        setError("Harga dasar wajib diisi");
+        return;
+      }
+    } else if (isAdminPoint) {
+      if (!claimSellPrice || Number(claimSellPrice) <= 0) {
+        setError("Harga jual wajib diisi");
+        return;
+      }
+    }
     setClaiming(true);
     try {
-      await api.post("/inventory/claim", { productId, qty: claimQty ? Number(claimQty) : undefined });
+      await api.post("/inventory/claim", {
+        productId,
+        qty: claimQty ? Number(claimQty) : undefined,
+        basePrice: isRDHAdmin ? Number(claimBasePrice) : undefined,
+        sellPrice: !isRDHAdmin && isAdminPoint ? Number(claimSellPrice) : undefined,
+        discountPrice: !isRDHAdmin && isAdminPoint && claimDiscountPrice ? Number(claimDiscountPrice) : undefined,
+      });
       setClaimRowId("");
       loadProducts();
     } catch (err: any) {
@@ -129,6 +166,34 @@ function AdminProductsContent() {
       setError(err.message);
     } finally {
       setSavingThreshold(false);
+    }
+  }
+
+  function openPriceForm(inventoryId: string, inv: { basePrice?: number | null; sellPrice?: number | null; discountPrice?: number | null }) {
+    setError("");
+    setPriceRowId(inventoryId);
+    setPriceForm({
+      basePrice: inv.basePrice != null ? String(inv.basePrice) : "",
+      sellPrice: inv.sellPrice != null ? String(inv.sellPrice) : "",
+      discountPrice: inv.discountPrice != null ? String(inv.discountPrice) : "",
+    });
+  }
+
+  async function handleSavePrice(inventoryId: string) {
+    setError("");
+    setSavingPrice(true);
+    try {
+      await api.patch(`/inventory/${inventoryId}/price`, {
+        basePrice: isRDHAdmin ? Number(priceForm.basePrice) : undefined,
+        sellPrice: !isRDHAdmin ? Number(priceForm.sellPrice) : undefined,
+        discountPrice: !isRDHAdmin ? (priceForm.discountPrice ? Number(priceForm.discountPrice) : null) : undefined,
+      });
+      setPriceRowId("");
+      loadProducts();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSavingPrice(false);
     }
   }
 
@@ -183,7 +248,10 @@ function AdminProductsContent() {
       {isAdminPoint && (
         <p className="mb-4 text-sm text-ink/50">
           Produk diinput terpusat oleh Admin Pusat. Klik <strong>Klaim</strong> supaya produk masuk ke inventaris
-          Point kamu — boleh langsung isi stok awal, atau nanti diisi lewat Transfer Stok / Purchase Order.
+          lokasi kamu — boleh langsung isi stok awal, atau nanti diisi lewat Transfer Stok / Purchase Order.{" "}
+          {isRDHAdmin
+            ? "Sebagai RDH, kamu wajib isi Harga Dasar saat klaim — ini jadi acuan harga jual Mart/Point di bawahmu."
+            : "Kamu wajib isi Harga Jual saat klaim, tidak boleh di bawah Harga Dasar RDH induk (boleh, tapi akan ditandai)."}
         </p>
       )}
       {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
@@ -255,7 +323,30 @@ function AdminProductsContent() {
                   </td>
                   <td className="py-2">{p.name}</td>
                   <td className="py-2 text-ink/50">{p.sku}</td>
-                  <td className="py-2">{formatRupiah(p.discountPrice ?? p.sellPrice)}</td>
+                  <td className="py-2">
+                    {isAdminPoint ? (
+                      myInventory ? (
+                        isRDHAdmin ? (
+                          myInventory.basePrice != null ? formatRupiah(myInventory.basePrice) : <span className="text-ink/30">Belum diatur</span>
+                        ) : myInventory.sellPrice != null ? (
+                          <>
+                            {formatRupiah(myInventory.discountPrice ?? myInventory.sellPrice)}
+                            {myInventory.discountPrice != null && (
+                              <span className="ml-1 text-xs text-ink/40 line-through">{formatRupiah(myInventory.sellPrice)}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-ink/30">Belum diatur</span>
+                        )
+                      ) : (
+                        <span className="text-ink/30">-</span>
+                      )
+                    ) : p.priceMin != null ? (
+                      p.priceMin === p.priceMax ? formatRupiah(p.priceMin) : `${formatRupiah(p.priceMin)} – ${formatRupiah(p.priceMax!)}`
+                    ) : (
+                      <span className="text-ink/30">Belum ada harga</span>
+                    )}
+                  </td>
                   <td className="py-2">{isAdminPoint ? myInventory?.stock ?? "-" : p.totalStock ?? "-"}</td>
                   <td className="py-2 text-right">
                     {isAdminPoint ? (
@@ -291,11 +382,58 @@ function AdminProductsContent() {
                               Batal
                             </button>
                           </div>
+                        ) : priceRowId === myInventory.id ? (
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
+                            {isRDHAdmin ? (
+                              <Input
+                                type="number" min={0} placeholder="Harga dasar"
+                                value={priceForm.basePrice}
+                                onChange={(e) => setPriceForm({ ...priceForm, basePrice: e.target.value })}
+                                className="!w-28 !py-1.5 text-xs"
+                              />
+                            ) : (
+                              <>
+                                <Input
+                                  type="number" min={0} placeholder="Harga jual"
+                                  value={priceForm.sellPrice}
+                                  onChange={(e) => setPriceForm({ ...priceForm, sellPrice: e.target.value })}
+                                  className="!w-24 !py-1.5 text-xs"
+                                />
+                                <Input
+                                  type="number" min={0} placeholder="Diskon"
+                                  value={priceForm.discountPrice}
+                                  onChange={(e) => setPriceForm({ ...priceForm, discountPrice: e.target.value })}
+                                  className="!w-24 !py-1.5 text-xs"
+                                />
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleSavePrice(myInventory.id)}
+                              disabled={savingPrice}
+                              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+                            >
+                              {savingPrice ? <Loader2 size={13} className="animate-spin" /> : "Simpan"}
+                            </button>
+                            <button onClick={() => setPriceRowId("")} disabled={savingPrice} className="rounded-lg px-2 py-1.5 text-xs text-ink/50 hover:bg-accent">
+                              Batal
+                            </button>
+                          </div>
                         ) : (
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex flex-wrap items-center justify-end gap-1.5">
                             <span className="inline-flex items-center gap-1 rounded-lg bg-primary-light px-3 py-1.5 text-xs font-medium text-primary">
                               <PackageCheck size={13} /> Sudah diklaim
                             </span>
+                            {!isRDHAdmin && myInventory.sellPrice != null && myInventory.basePrice != null && myInventory.sellPrice < myInventory.basePrice && (
+                              <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-700">
+                                <AlertTriangle size={12} /> Di bawah harga dasar
+                              </span>
+                            )}
+                            <button
+                              onClick={() => openPriceForm(myInventory!.id, myInventory!)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-ink/60 hover:bg-primary-light hover:text-primary"
+                            >
+                              <Tag size={12} /> Atur Harga
+                            </button>
                             <button
                               onClick={() => openThresholdForm(myInventory!.id, myInventory!)}
                               className="rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-ink/60 hover:bg-primary-light hover:text-primary"
@@ -312,7 +450,7 @@ function AdminProductsContent() {
                           </div>
                         )
                       ) : isClaimingThis ? (
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex flex-wrap items-center justify-end gap-1.5">
                           <Input
                             type="number"
                             min={0}
@@ -321,6 +459,29 @@ function AdminProductsContent() {
                             onChange={(e) => setClaimQty(e.target.value)}
                             className="!w-24 !py-1.5 text-xs"
                           />
+                          {isRDHAdmin ? (
+                            <Input
+                              type="number" min={0} placeholder="Harga dasar *"
+                              value={claimBasePrice}
+                              onChange={(e) => setClaimBasePrice(e.target.value)}
+                              className="!w-28 !py-1.5 text-xs"
+                            />
+                          ) : (
+                            <>
+                              <Input
+                                type="number" min={0} placeholder="Harga jual *"
+                                value={claimSellPrice}
+                                onChange={(e) => setClaimSellPrice(e.target.value)}
+                                className="!w-24 !py-1.5 text-xs"
+                              />
+                              <Input
+                                type="number" min={0} placeholder="Diskon"
+                                value={claimDiscountPrice}
+                                onChange={(e) => setClaimDiscountPrice(e.target.value)}
+                                className="!w-24 !py-1.5 text-xs"
+                              />
+                            </>
+                          )}
                           <button
                             onClick={() => handleClaim(p.id)}
                             disabled={claiming}
@@ -335,6 +496,13 @@ function AdminProductsContent() {
                           >
                             Batal
                           </button>
+                          {!isRDHAdmin && (() => {
+                            const parentInv = parentInventoryOf(p);
+                            if (!parentInv || parentInv.basePrice == null) {
+                              return <p className="w-full text-right text-xs text-red-600">RDH induk belum atur harga dasar produk ini — klaim akan ditolak.</p>;
+                            }
+                            return <p className="w-full text-right text-xs text-ink/40">Harga dasar RDH: {formatRupiah(parentInv.basePrice)}</p>;
+                          })()}
                         </div>
                       ) : (
                         <button

@@ -8,10 +8,16 @@ import { Input } from "@/components/ui/Input";
 import { api } from "@/lib/api";
 import { Product, Order } from "@/types";
 import { formatRupiah } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 
 interface PosLine { productId: string; name: string; price: number; qty: number; }
 
 function KasirContent() {
+  const { user } = useAuth();
+  // Kasir normal terkunci ke Point-nya sendiri (harga & stok harus dari lokasi
+  // ini). ADMIN/SUPER_ADMIN yang buka POS ini tanpa managedPointId (jarang,
+  // biasanya buat testing) fallback ke pencarian umum + auto-pilih Point.
+  const myPointId = user?.managedPointId || undefined;
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [lines, setLines] = useState<PosLine[]>([]);
@@ -32,7 +38,10 @@ function KasirContent() {
     setSearch(q);
     setScanError("");
     if (!q) return setResults([]);
-    const res = await api.get<{ items: Product[] }>(`/products?search=${encodeURIComponent(q)}&limit=6`);
+    // Pencarian point-scoped: harga & stok yang tampil selalu punya Kasir sendiri.
+    const res = myPointId
+      ? await api.get<{ items: Product[] }>(`/points/${myPointId}/products?search=${encodeURIComponent(q)}&limit=6`)
+      : await api.get<{ items: Product[] }>(`/products?search=${encodeURIComponent(q)}&limit=6`);
     setResults(res.items);
   }
 
@@ -44,17 +53,29 @@ function KasirContent() {
     const code = search.trim();
     if (!code) return;
     try {
-      const product = await api.get<Product>(`/products/barcode/${encodeURIComponent(code)}`);
+      const qs = myPointId ? `?pointId=${myPointId}` : "";
+      const product = await api.get<Product>(`/products/barcode/${encodeURIComponent(code)}${qs}`);
       addLine(product);
     } catch {
       setScanError(`Barcode "${code}" tidak ditemukan.`);
     }
   }
 
+  function priceOf(p: Product): number | null {
+    // Hasil /points/:id/products & /products/barcode?pointId= sama-sama pakai
+    // field currentPoint (lihat point.controller.ts / product.controller.ts).
+    if (p.currentPoint) return p.currentPoint.discountPrice ?? p.currentPoint.sellPrice ?? p.currentPoint.basePrice;
+    return p.priceMin ?? null;
+  }
+
   function addLine(p: Product) {
+    const price = priceOf(p);
+    if (price == null) {
+      setScanError(`Produk "${p.name}" belum punya harga jual di lokasi ini.`);
+      return;
+    }
     setLines((prev) => {
       const existing = prev.find((l) => l.productId === p.id);
-      const price = p.discountPrice ?? p.sellPrice;
       if (existing) return prev.map((l) => (l.productId === p.id ? { ...l, qty: l.qty + 1 } : l));
       return [...prev, { productId: p.id, name: p.name, price, qty: 1 }];
     });
@@ -86,6 +107,7 @@ function KasirContent() {
         shippingMethod: "PICKUP",
         paymentMethod: payment,
         notes: "Transaksi POS Kasir",
+        pointId: myPointId,
       });
       setLastOrder(order);
       setLines([]);
@@ -122,16 +144,19 @@ function KasirContent() {
             )}
             {results.length > 0 && (
               <div className="absolute z-10 mt-1 w-full rounded-xl border border-black/10 bg-white shadow-soft">
-                {results.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => addLine(p)}
-                    className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-accent"
-                  >
-                    <span>{p.name}</span>
-                    <span className="text-primary">{formatRupiah(p.discountPrice ?? p.sellPrice)}</span>
-                  </button>
-                ))}
+                {results.map((p) => {
+                  const price = priceOf(p);
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => addLine(p)}
+                      className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm hover:bg-accent"
+                    >
+                      <span>{p.name}</span>
+                      <span className="text-primary">{price != null ? formatRupiah(price) : "-"}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
