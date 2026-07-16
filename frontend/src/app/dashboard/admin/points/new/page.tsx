@@ -6,6 +6,7 @@ import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { RegionCascade } from "@/components/ui/RegionCascade";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { FulfillmentPoint, LocationType } from "@/types";
@@ -25,6 +26,7 @@ function NewLocationContent() {
   const [type, setType] = useState<LocationType>("POINT");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
+  const [province, setProvince] = useState(""); // cuma alat bantu filter dropdown, tidak dikirim ke backend
   const [city, setCity] = useState("");
   const [address, setAddress] = useState("");
   const [latitude, setLatitude] = useState("");
@@ -130,15 +132,16 @@ function NewLocationContent() {
               <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Contoh: RDH-MKS" />
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">Kota *</label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Contoh: Makassar" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Telepon</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Opsional" />
-            </div>
+          <RegionCascade
+            province={province}
+            city={city}
+            onChange={(next) => { setProvince(next.province); setCity(next.city); }}
+            showKecamatan={false}
+            required
+          />
+          <div>
+            <label className="mb-1 block text-sm font-medium">Telepon</label>
+            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Opsional" />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Alamat *</label>

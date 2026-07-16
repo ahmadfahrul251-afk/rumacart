@@ -6,6 +6,7 @@ import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { RegionCascade } from "@/components/ui/RegionCascade";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/lib/auth-context";
@@ -13,7 +14,10 @@ import { api } from "@/lib/api";
 import { DeliveryArea, FulfillmentPoint } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
-const EMPTY_FORM = { pointId: "", kecamatan: "", city: "", cost: "" };
+// `province` cuma alat bantu filter di dropdown (biar daftar kota lebih
+// ringkas) — DeliveryArea di backend tidak punya kolom provinsi, jadi tidak
+// ikut dikirim saat submit.
+const EMPTY_FORM = { pointId: "", province: "", kecamatan: "", city: "", cost: "" };
 
 function DeliveryAreasContent() {
   const { user } = useAuth();
@@ -130,18 +134,17 @@ function DeliveryAreasContent() {
               </div>
             )}
             <div>
-              <label className="mb-1 block text-sm font-medium">Kecamatan *</label>
-              <Input value={form.kecamatan} onChange={(e) => setForm({ ...form, kecamatan: e.target.value })} placeholder="misal: Cibeunying Kidul" />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Kota *</label>
-              <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="misal: Bandung" />
-            </div>
-            <div>
               <label className="mb-1 block text-sm font-medium">Biaya Antar (Rp) *</label>
               <Input type="number" min={0} value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} />
             </div>
           </div>
+          <RegionCascade
+            province={form.province}
+            city={form.city}
+            kecamatan={form.kecamatan}
+            onChange={(next) => setForm({ ...form, ...next })}
+            required
+          />
           <p className="text-xs text-ink/40">Kalau kecamatan+kota yang sama sudah ada buat lokasi ini, biayanya otomatis di-update (bukan bikin baris baru).</p>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">

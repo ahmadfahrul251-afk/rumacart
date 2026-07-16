@@ -19,6 +19,7 @@ import userRoutes from "./user.routes";
 import stockTransferRoutes from "./stockTransfer.routes";
 import restockRequestRoutes from "./restockRequest.routes";
 import deliveryAreaRoutes from "./deliveryArea.routes";
+import regionRoutes from "./region.routes";
 
 const router = Router();
 
@@ -42,5 +43,6 @@ router.use("/reviews", reviewRoutes);
 router.use("/suppliers", supplierRoutes);
 router.use("/purchase-orders", purchaseOrderRoutes);
 router.use("/notifications", notificationRoutes);
+router.use("/regions", regionRoutes);
 
 export default router;

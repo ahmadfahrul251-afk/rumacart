@@ -8,6 +8,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { RegionCascade } from "@/components/ui/RegionCascade";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from "@/lib/auth-context";
@@ -49,7 +50,7 @@ function addressToForm(a: Address): AddressForm {
   };
 }
 
-function AddressFormFields({ form, onChange }: { form: AddressForm; onChange: (f: AddressForm) => void }) {
+function AddressFormFields({ form, onChange, regionKey }: { form: AddressForm; onChange: (f: AddressForm) => void; regionKey: string }) {
   return (
     <div className="space-y-3">
       <div>
@@ -72,25 +73,17 @@ function AddressFormFields({ form, onChange }: { form: AddressForm; onChange: (f
         <label className="mb-1 block text-sm font-medium">Alamat Lengkap *</label>
         <Input value={form.fullAddress} onChange={(e) => onChange({ ...form, fullAddress: e.target.value })} placeholder="Nama jalan, no rumah, RT/RW, patokan" />
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium">Kecamatan</label>
-          <Input value={form.kecamatan} onChange={(e) => onChange({ ...form, kecamatan: e.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Kota *</label>
-          <Input value={form.city} onChange={(e) => onChange({ ...form, city: e.target.value })} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="mb-1 block text-sm font-medium">Provinsi</label>
-          <Input value={form.province} onChange={(e) => onChange({ ...form, province: e.target.value })} />
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium">Kode Pos</label>
-          <Input value={form.postalCode} onChange={(e) => onChange({ ...form, postalCode: e.target.value })} />
-        </div>
+      <RegionCascade
+        key={regionKey}
+        province={form.province}
+        city={form.city}
+        kecamatan={form.kecamatan}
+        onChange={(next) => onChange({ ...form, ...next })}
+        required
+      />
+      <div>
+        <label className="mb-1 block text-sm font-medium">Kode Pos</label>
+        <Input value={form.postalCode} onChange={(e) => onChange({ ...form, postalCode: e.target.value })} />
       </div>
     </div>
   );
@@ -192,7 +185,7 @@ function AddressesContent() {
         {addresses?.map((a) =>
           editingId === a.id ? (
             <form key={a.id} onSubmit={handleSaveEdit} className="card space-y-3">
-              <AddressFormFields form={editForm} onChange={setEditForm} />
+              <AddressFormFields form={editForm} onChange={setEditForm} regionKey={`edit-${a.id}`} />
               {error && <p className="text-sm text-red-600">{error}</p>}
               <div className="flex gap-2">
                 <Button type="submit" disabled={saving} className="flex-1">
@@ -241,7 +234,7 @@ function AddressesContent() {
       {showAdd ? (
         <form onSubmit={handleAdd} className="card mt-4 space-y-3">
           <p className="font-semibold">Alamat Baru</p>
-          <AddressFormFields form={addForm} onChange={setAddForm} />
+          <AddressFormFields form={addForm} onChange={setAddForm} regionKey={showAdd ? "add-form" : "add-form-hidden"} />
           {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="flex gap-2">
             <Button type="submit" disabled={saving} className="flex-1">

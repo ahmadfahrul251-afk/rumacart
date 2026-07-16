@@ -7,6 +7,7 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { RegionCascade } from "@/components/ui/RegionCascade";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { api } from "@/lib/api";
@@ -28,7 +29,7 @@ export default function CheckoutPage() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [addressId, setAddressId] = useState("");
   const [showNewAddress, setShowNewAddress] = useState(false);
-  const [newAddress, setNewAddress] = useState({ recipientName: "", phone: "", fullAddress: "", kecamatan: "", city: "" });
+  const [newAddress, setNewAddress] = useState({ recipientName: "", phone: "", fullAddress: "", kecamatan: "", city: "", province: "" });
 
   // Ongkir sekarang PICKUP (gratis) atau DELIVERY (biaya beda-beda tergantung
   // kecamatan tujuan x Point asal) — dipilih PER GRUP Point, bukan global lagi,
@@ -237,10 +238,13 @@ export default function CheckoutPage() {
                   <Input placeholder="Nama Penerima" value={newAddress.recipientName} onChange={(e) => setNewAddress({ ...newAddress, recipientName: e.target.value })} />
                   <Input placeholder="No. HP" value={newAddress.phone} onChange={(e) => setNewAddress({ ...newAddress, phone: e.target.value })} />
                   <Input placeholder="Alamat Lengkap" value={newAddress.fullAddress} onChange={(e) => setNewAddress({ ...newAddress, fullAddress: e.target.value })} />
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input placeholder="Kecamatan" value={newAddress.kecamatan} onChange={(e) => setNewAddress({ ...newAddress, kecamatan: e.target.value })} />
-                    <Input placeholder="Kota" value={newAddress.city} onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })} />
-                  </div>
+                  <RegionCascade
+                    key={showNewAddress ? "new-address" : "hidden"}
+                    province={newAddress.province}
+                    city={newAddress.city}
+                    kecamatan={newAddress.kecamatan}
+                    onChange={(next) => setNewAddress({ ...newAddress, ...next })}
+                  />
                   <p className="text-xs text-ink/40">Isi Kecamatan supaya sistem bisa cek Point mana yang bisa antar ke alamatmu.</p>
                   {addresses.length > 0 && (
                     <button onClick={() => setShowNewAddress(false)} className="text-sm text-ink/60">Batal, pilih alamat tersimpan</button>

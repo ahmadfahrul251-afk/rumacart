@@ -205,6 +205,25 @@ export interface CitySales {
   revenue: number;
 }
 
+// Data wilayah resmi Indonesia (Kemendagri) — dipakai dropdown bertingkat
+// Provinsi -> Kota/Kabupaten -> Kecamatan di semua form alamat.
+export interface Province {
+  kode: string;
+  nama: string;
+}
+
+export interface Regency {
+  kode: string;
+  kode_provinsi: string;
+  nama: string;
+}
+
+export interface District {
+  kode: string;
+  kode_kabupaten: string;
+  nama: string;
+}
+
 export interface Address {
   id: string;
   label: string;

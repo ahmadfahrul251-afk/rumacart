@@ -6,6 +6,7 @@ import { RoleGuard } from "@/components/dashboard/RoleGuard";
 import { DashboardSidebar } from "@/components/dashboard/Sidebar";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { RegionCascade } from "@/components/ui/RegionCascade";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { FulfillmentPoint, LocationType } from "@/types";
@@ -25,6 +26,10 @@ function EditLocationContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  // Cuma alat bantu filter dropdown — FulfillmentPoint di backend tidak
+  // punya kolom provinsi, dan datanya lama (belum tentu bisa ditelusuri
+  // otomatis dari nama kota tersimpan), jadi mulai kosong.
+  const [province, setProvince] = useState("");
 
   useEffect(() => {
     api.get<FulfillmentPoint>(`/points/${id}`).then(setPoint).catch(() => setPoint(null));
@@ -102,8 +107,14 @@ function EditLocationContent() {
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Kota</label>
-            <Input value={point.city} onChange={(e) => setPoint({ ...point, city: e.target.value })} />
+            <p className="mb-1 text-sm font-medium">Kota</p>
+            <p className="mb-2 text-xs text-ink/50">Kota saat ini: <span className="font-medium text-ink/70">{point.city}</span>. Pilih ulang di bawah kalau mau ganti.</p>
+            <RegionCascade
+              province={province}
+              city=""
+              onChange={(next) => { setProvince(next.province); if (next.city) setPoint({ ...point, city: next.city }); }}
+              showKecamatan={false}
+            />
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Alamat</label>
