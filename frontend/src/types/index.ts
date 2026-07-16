@@ -451,7 +451,7 @@ export interface Voucher {
   discount?: number; // hanya ada di response /vouchers/validate
 }
 
-export type NotificationType = "ORDER" | "PROMO" | "SYSTEM";
+export type NotificationType = "ORDER" | "PROMO" | "SYSTEM" | "REMINDER";
 
 export interface Notification {
   id: string;
@@ -473,6 +473,35 @@ export interface CartItem {
   price: number;
   image?: string;
   qty: number;
+}
+
+// Round 21: Belanja Bulanan — daftar kebutuhan bulanan yang tersimpan di
+// server (bukan localStorage) + jadwal pengingat. `items` sudah dilengkapi
+// nama produk/varian, gambar, dan estimasi rentang harga oleh backend
+// (lihat serializePlan() di shoppingPlan.controller.ts).
+export interface ShoppingPlanItem {
+  id: string;
+  variantId: string;
+  qty: number;
+  variantName: string;
+  productName: string;
+  image?: string | null;
+  priceMin?: number | null;
+  priceMax?: number | null;
+}
+
+export interface ShoppingPlan {
+  id: string;
+  userId: string;
+  name: string;
+  checkoutDay: number; // tanggal 1-28 tiap bulan
+  reminderOffsetDays: number; // H-berapa sebelum checkoutDay (0 = tanpa pengingat)
+  isActive: boolean;
+  lastReminderSentAt?: string | null;
+  lastCheckoutPromptAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: ShoppingPlanItem[];
 }
 
 // Dipakai Keranjang Beli Sekarang — Point dipilih per item saat "Tambah ke

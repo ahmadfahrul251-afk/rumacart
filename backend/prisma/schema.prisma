@@ -108,9 +108,10 @@ enum VoucherDiscountType {
 }
 
 enum NotificationType {
-  ORDER   // perubahan status pesanan / pembayaran
-  PROMO   // voucher/promo baru
-  SYSTEM  // pengumuman umum
+  ORDER     // perubahan status pesanan / pembayaran
+  PROMO     // voucher/promo baru
+  SYSTEM    // pengumuman umum
+  REMINDER  // pengingat jadwal Belanja Bulanan (H-offset & hari-H)
 }
 
 enum StockTransferStatus {
@@ -145,6 +146,7 @@ model User {
   purchaseOrders   PurchaseOrder[]
   notifications    Notification[]
   stockTransfers   StockTransfer[]
+  shoppingPlans    ShoppingPlan[]
 
   @@map("users")
 }
@@ -241,6 +243,7 @@ model ProductVariant {
   purchaseOrderItems PurchaseOrderItem[]
   stockTransferItems StockTransferItem[]
   restockRequests    RestockRequest[]
+  planItems          ShoppingPlanItem[]
 
   @@map("product_variants")
 }
@@ -639,4 +642,45 @@ model Notification {
 
   @@index([userId, isRead])
   @@map("notifications")
+}
+
+// ================== BELANJA BULANAN ==================
+// Daftar kebutuhan bulanan yang bisa dijadwalkan: customer set tanggal
+// checkout tiap bulan (1-28, dibatasi biar aman lintas panjang bulan) +
+// berapa hari sebelumnya mereka mau diingatkan (H-offset). Cron harian
+// (lihat shoppingPlanReminder.service.ts) yang cek jadwalnya & kirim
+// Notification — bukan keranjang beneran (keranjang cuma ada di
+// localStorage/browser), jadi begitu waktunya, customer buka notifikasi lalu
+// tekan "Pindahkan ke Keranjang" supaya daftar ini masuk ke keranjang
+// "Beli Sekarang" yang sudah ada, lalu lanjut checkout seperti biasa.
+model ShoppingPlan {
+  id                   String    @id @default(cuid())
+  userId               String
+  name                 String    @default("Belanja Bulanan")
+  checkoutDay          Int       @default(1) // tanggal 1-28 tiap bulan
+  reminderOffsetDays   Int       @default(3) // H-3 default, bisa H-1 dst
+  isActive             Boolean   @default(true)
+  lastReminderSentAt   DateTime? // cegah cron kirim notif pengingat dobel di hari yang sama
+  lastCheckoutPromptAt DateTime? // cegah cron kirim notif hari-H dobel di hari yang sama
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ShoppingPlanItem[]
+
+  @@map("shopping_plans")
+}
+
+model ShoppingPlanItem {
+  id        String   @id @default(cuid())
+  planId    String
+  variantId String
+  qty       Int      @default(1)
+  createdAt DateTime @default(now())
+
+  plan    ShoppingPlan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([planId, variantId]) // varian yang sama tidak dobel baris, cukup naikkan qty
+  @@map("shopping_plan_items")
 }

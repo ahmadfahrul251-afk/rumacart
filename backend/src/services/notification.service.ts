@@ -1,6 +1,6 @@
 import { prisma } from "../config/db";
 
-type NotificationType = "ORDER" | "PROMO" | "SYSTEM";
+type NotificationType = "ORDER" | "PROMO" | "SYSTEM" | "REMINDER";
 
 interface NotifyInput {
   userId: string;

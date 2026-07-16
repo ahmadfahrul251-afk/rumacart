@@ -20,6 +20,7 @@ import stockTransferRoutes from "./stockTransfer.routes";
 import restockRequestRoutes from "./restockRequest.routes";
 import deliveryAreaRoutes from "./deliveryArea.routes";
 import regionRoutes from "./region.routes";
+import shoppingPlanRoutes from "./shoppingPlan.routes";
 
 const router = Router();
 
@@ -44,5 +45,6 @@ router.use("/suppliers", supplierRoutes);
 router.use("/purchase-orders", purchaseOrderRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/regions", regionRoutes);
+router.use("/shopping-plans", shoppingPlanRoutes);
 
 export default router;

@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Tag, Package, Info } from "lucide-react";
+import { Bell, CheckCheck, Tag, Package, Info, CalendarClock } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { Notification } from "@/types";
 
 const POLL_INTERVAL_MS = 20000;
 
-const TYPE_ICON: Record<string, any> = { ORDER: Package, PROMO: Tag, SYSTEM: Info };
+const TYPE_ICON: Record<string, any> = { ORDER: Package, PROMO: Tag, SYSTEM: Info, REMINDER: CalendarClock };
 
 function timeAgo(dateStr: string) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
@@ -74,6 +74,7 @@ export function NotificationBell() {
     setOpen(false);
     if (n.type === "PROMO") router.push("/promo");
     else if (n.type === "ORDER") router.push("/orders");
+    else if (n.type === "REMINDER") router.push("/belanja-bulanan");
   }
 
   if (!user) return null;

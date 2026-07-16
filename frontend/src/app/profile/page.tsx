@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Heart, Package, MapPin, Pencil } from "lucide-react";
+import { Heart, Package, MapPin, Pencil, CalendarClock } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { useAuth } from "@/lib/auth-context";
@@ -60,6 +60,10 @@ export default function ProfilePage() {
           <Link href="/profile/wishlist" className="card flex items-center gap-3 hover:shadow-soft">
             <Heart size={20} className="text-secondary" />
             <span className="text-sm font-medium">Wishlist Saya</span>
+          </Link>
+          <Link href="/belanja-bulanan" className="card col-span-2 flex items-center gap-3 hover:shadow-soft">
+            <CalendarClock size={20} className="text-primary" />
+            <span className="text-sm font-medium">Belanja Bulanan</span>
           </Link>
           <Link href="/orders" className="card col-span-2 flex items-center gap-3 hover:shadow-soft">
             <Package size={20} className="text-primary" />
