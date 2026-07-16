@@ -154,7 +154,7 @@ export default function CheckoutPage() {
         try {
           const order = await api.post<Order>("/orders", {
             addressId: finalAddressId,
-            items: g.items.map((it) => ({ productId: it.productId, qty: it.qty })),
+            items: g.items.map((it) => ({ variantId: it.variantId, qty: it.qty })),
             shippingMethod: shippingMethods[g.pointId] || "PICKUP",
             paymentMethod,
             // Voucher cuma dipakai sekali, di Order pertama saja — supaya tidak
@@ -267,7 +267,7 @@ export default function CheckoutPage() {
                         <MapPin size={14} className="text-primary" /> {g.pointName} <span className="font-normal text-ink/40">({g.pointCode})</span>
                       </p>
                       {g.items.map((it) => (
-                        <div key={it.productId} className="flex justify-between text-sm text-ink/70">
+                        <div key={it.variantId} className="flex justify-between text-sm text-ink/70">
                           <span>{it.name} x{it.qty}</span>
                           <span>{formatRupiah(it.price * it.qty)}</span>
                         </div>

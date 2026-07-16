@@ -11,7 +11,14 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { RestockRequest, RestockRequestStatus, FulfillmentPoint, Product } from "@/types";
+import { RestockRequest, RestockRequestStatus, FulfillmentPoint, Product, ProductVariant } from "@/types";
+
+interface VariantOption { product: Product; variant: ProductVariant; }
+
+function variantLabel(o: VariantOption) {
+  const name = !o.variant.name || o.variant.name === "Default" ? o.product.name : `${o.product.name} (${o.variant.name})`;
+  return `${name} — ${o.variant.sku}`;
+}
 
 const STATUS_TABS: { value: "ALL" | RestockRequestStatus; label: string }[] = [
   { value: "ALL", label: "Semua" },
@@ -21,7 +28,7 @@ const STATUS_TABS: { value: "ALL" | RestockRequestStatus; label: string }[] = [
   { value: "REJECTED", label: "Ditolak" },
 ];
 
-const EMPTY_FORM = { productId: "", qty: "", sourceHubId: "", note: "" };
+const EMPTY_FORM = { variantId: "", qty: "", sourceHubId: "", note: "" };
 
 function RestockRequestsContent() {
   const { user } = useAuth();
@@ -48,17 +55,19 @@ function RestockRequestsContent() {
     api.get<{ items: Product[] }>("/products?limit=100").then((res) => setProducts(res.items)).catch(() => {});
   }, []);
 
+  const variantOptions: VariantOption[] = products.flatMap((p) => (p.variants || []).map((v) => ({ product: p, variant: v })));
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!form.productId || !form.qty) {
+    if (!form.variantId || !form.qty) {
       setError("Produk dan jumlah wajib diisi");
       return;
     }
     setSaving(true);
     try {
       await api.post("/restock-requests", {
-        productId: form.productId,
+        variantId: form.variantId,
         qty: Number(form.qty),
         sourceHubId: form.sourceHubId || undefined,
         note: form.note || undefined,
@@ -142,13 +151,13 @@ function RestockRequestsContent() {
             <div>
               <label className="mb-1 block text-sm font-medium">Produk *</label>
               <select
-                value={form.productId}
-                onChange={(e) => setForm({ ...form, productId: e.target.value })}
+                value={form.variantId}
+                onChange={(e) => setForm({ ...form, variantId: e.target.value })}
                 className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary"
               >
                 <option value="">Pilih produk</option>
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                {variantOptions.map((o) => (
+                  <option key={o.variant.id} value={o.variant.id}>{variantLabel(o)}</option>
                 ))}
               </select>
             </div>
@@ -223,7 +232,8 @@ function RestockRequestsContent() {
                     {r.requestNumber} {r.isAuto && <span className="ml-1 rounded-full bg-accent px-2 py-0.5 text-xs font-normal text-ink/50">Otomatis</span>}
                   </p>
                   <p className="text-sm text-ink/60">
-                    {r.product?.name || r.productId} · {r.qty} unit
+                    {r.variant?.product?.name || r.variantId}
+                    {r.variant?.name && r.variant.name !== "Default" && <> ({r.variant.name})</>} · {r.qty} unit
                   </p>
                   <p className="text-xs text-ink/40">
                     Peminta: {r.point?.name || "-"} · Sumber: {r.sourceHub?.name || "belum ditentukan"}

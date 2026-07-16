@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Product, InventoryHistory, InventoryMoveType } from "@/types";
+import { Product, ProductVariant, InventoryHistory, InventoryMoveType } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
 const HISTORY_LABEL: Record<InventoryMoveType, string> = {
@@ -36,6 +36,14 @@ const HISTORY_TONE: Record<InventoryMoveType, string> = {
   EXPIRED: "text-red-600",
 };
 
+// Round 18: klaim/harga/stok sekarang per VARIAN (bukan per produk), jadi tabel
+// ini menampilkan 1 baris per varian — 1 produk dengan 3 varian rasa akan
+// muncul jadi 3 baris, masing-masing diklaim & diatur harganya sendiri-sendiri.
+interface Row {
+  product: Product;
+  variant: ProductVariant;
+}
+
 function AdminProductsContent() {
   const { user } = useAuth();
   const isPusat = user?.role === "ADMIN" || user?.role === "SUPER_ADMIN";
@@ -46,7 +54,7 @@ function AdminProductsContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [claimFilter, setClaimFilter] = useState<"ALL" | "UNCLAIMED" | "CLAIMED">("ALL");
-  const [claimRowId, setClaimRowId] = useState(""); // baris yang lagi buka form klaim
+  const [claimRowId, setClaimRowId] = useState(""); // variantId yang lagi buka form klaim
   const [claimQty, setClaimQty] = useState("");
   const [claimBasePrice, setClaimBasePrice] = useState(""); // dipakai kalau lokasi ini RDH
   const [claimSellPrice, setClaimSellPrice] = useState(""); // dipakai kalau lokasi ini Mart/Point
@@ -64,7 +72,7 @@ function AdminProductsContent() {
   const isRDHAdmin = isAdminPoint && pointType === "RDH";
 
   // Modal Riwayat Stok — juga tempat catat Retur/Rusak/Kadaluarsa
-  const [historyInv, setHistoryInv] = useState<{ id: string; productId: string; productName: string } | null>(null);
+  const [historyInv, setHistoryInv] = useState<{ id: string; variantId: string; label: string } | null>(null);
   const [historyList, setHistoryList] = useState<InventoryHistory[] | null>(null);
   const [quickForm, setQuickForm] = useState({ type: "RETURN" as "RETURN" | "DAMAGE" | "EXPIRED", qty: "", note: "" });
   const [savingQuick, setSavingQuick] = useState(false);
@@ -84,33 +92,39 @@ function AdminProductsContent() {
 
   useEffect(loadProducts, [search, page]);
 
-  function myInventoryOf(p: Product) {
-    return isAdminPoint ? p.inventory?.find((inv) => inv.pointId === user?.managedPointId) : undefined;
+  const rows: Row[] = (products || []).flatMap((p) => (p.variants || []).map((v) => ({ product: p, variant: v })));
+
+  function myInventoryOf(v: ProductVariant) {
+    return isAdminPoint ? v.inventory?.find((inv) => inv.pointId === user?.managedPointId) : undefined;
   }
 
   // Referensi harga dasar dari RDH induk — dipakai buat validasi & tampilan
   // "jangan di bawah harga ini" saat Mart/Point klaim/atur harga jual.
-  function parentInventoryOf(p: Product) {
+  function parentInventoryOf(v: ProductVariant) {
     const parentId = user?.managedPoint?.parentHubId;
     if (!parentId) return undefined;
-    return p.inventory?.find((inv) => inv.pointId === parentId);
+    return v.inventory?.find((inv) => inv.pointId === parentId);
   }
 
-  const visibleProducts =
-    isAdminPoint && claimFilter !== "ALL"
-      ? products?.filter((p) => (claimFilter === "CLAIMED" ? !!myInventoryOf(p) : !myInventoryOf(p)))
-      : products;
+  function variantLabel(row: Row) {
+    return !row.variant.name || row.variant.name === "Default" ? row.product.name : `${row.product.name} (${row.variant.name})`;
+  }
 
-  function openClaimForm(productId: string) {
+  const visibleRows =
+    isAdminPoint && claimFilter !== "ALL"
+      ? rows.filter((r) => (claimFilter === "CLAIMED" ? !!myInventoryOf(r.variant) : !myInventoryOf(r.variant)))
+      : rows;
+
+  function openClaimForm(variantId: string) {
     setError("");
-    setClaimRowId(productId);
+    setClaimRowId(variantId);
     setClaimQty("");
     setClaimBasePrice("");
     setClaimSellPrice("");
     setClaimDiscountPrice("");
   }
 
-  async function handleClaim(productId: string) {
+  async function handleClaim(variantId: string) {
     setError("");
     if (isRDHAdmin) {
       if (!claimBasePrice || Number(claimBasePrice) <= 0) {
@@ -126,7 +140,7 @@ function AdminProductsContent() {
     setClaiming(true);
     try {
       await api.post("/inventory/claim", {
-        productId,
+        variantId,
         qty: claimQty ? Number(claimQty) : undefined,
         basePrice: isRDHAdmin ? Number(claimBasePrice) : undefined,
         sellPrice: !isRDHAdmin && isAdminPoint ? Number(claimSellPrice) : undefined,
@@ -197,9 +211,9 @@ function AdminProductsContent() {
     }
   }
 
-  function openHistory(inventoryId: string, productId: string, productName: string) {
+  function openHistory(inventoryId: string, variantId: string, label: string) {
     setError("");
-    setHistoryInv({ id: inventoryId, productId, productName });
+    setHistoryInv({ id: inventoryId, variantId, label });
     setHistoryList(null);
     setQuickForm({ type: "RETURN", qty: "", note: "" });
     api
@@ -218,12 +232,12 @@ function AdminProductsContent() {
     try {
       const endpoint = quickForm.type === "RETURN" ? "return" : quickForm.type === "DAMAGE" ? "damage" : "expired";
       await api.post(`/inventory/${endpoint}`, {
-        productId: historyInv.productId,
+        variantId: historyInv.variantId,
         qty: Number(quickForm.qty),
         note: quickForm.note || undefined,
       });
       setQuickForm({ type: quickForm.type, qty: "", note: "" });
-      openHistory(historyInv.id, historyInv.productId, historyInv.productName);
+      openHistory(historyInv.id, historyInv.variantId, historyInv.label);
       loadProducts();
     } catch (err: any) {
       setError(err.message);
@@ -247,8 +261,9 @@ function AdminProductsContent() {
       </div>
       {isAdminPoint && (
         <p className="mb-4 text-sm text-ink/50">
-          Produk diinput terpusat oleh Admin Pusat. Klik <strong>Klaim</strong> supaya produk masuk ke inventaris
-          lokasi kamu — boleh langsung isi stok awal, atau nanti diisi lewat Transfer Stok / Purchase Order.{" "}
+          Produk & varian diinput terpusat oleh Admin Pusat. Klik <strong>Klaim</strong> supaya varian itu masuk ke
+          inventaris lokasi kamu — boleh langsung isi stok awal, atau nanti diisi lewat Transfer Stok / Purchase
+          Order.{" "}
           {isRDHAdmin
             ? "Sebagai RDH, kamu wajib isi Harga Dasar saat klaim — ini jadi acuan harga jual Mart/Point di bawahmu."
             : "Kamu wajib isi Harga Jual saat klaim, tidak boleh di bawah Harga Dasar RDH induk (boleh, tapi akan ditandai)."}
@@ -293,6 +308,7 @@ function AdminProductsContent() {
             <tr>
               <th className="pb-2">Foto</th>
               <th className="pb-2">Nama</th>
+              <th className="pb-2">Varian</th>
               <th className="pb-2">SKU</th>
               <th className="pb-2">Harga</th>
               <th className="pb-2">Stok</th>
@@ -303,26 +319,28 @@ function AdminProductsContent() {
             {!products &&
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  <td colSpan={6} className="py-2"><Skeleton className="h-10 w-full" /></td>
+                  <td colSpan={7} className="py-2"><Skeleton className="h-10 w-full" /></td>
                 </tr>
               ))}
-            {visibleProducts?.map((p) => {
-              const myInventory = myInventoryOf(p);
-              const isClaimingThis = claimRowId === p.id;
+            {visibleRows.map((row) => {
+              const { product: p, variant: v } = row;
+              const myInventory = myInventoryOf(v);
+              const isClaimingThis = claimRowId === v.id;
               return (
-                <tr key={p.id} className="border-t border-black/5">
+                <tr key={v.id} className="border-t border-black/5">
                   <td className="py-2">
                     <div className="grid h-10 w-10 place-items-center rounded-lg bg-accent text-lg">
-                      {p.images?.[0] ? (
+                      {v.image || p.images?.[0] ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={p.images[0]} alt={p.name} className="h-full w-full rounded-lg object-cover" />
+                        <img src={v.image || p.images[0]} alt={p.name} className="h-full w-full rounded-lg object-cover" />
                       ) : (
                         "🛒"
                       )}
                     </div>
                   </td>
                   <td className="py-2">{p.name}</td>
-                  <td className="py-2 text-ink/50">{p.sku}</td>
+                  <td className="py-2 text-ink/50">{v.name}</td>
+                  <td className="py-2 text-ink/50">{v.sku}</td>
                   <td className="py-2">
                     {isAdminPoint ? (
                       myInventory ? (
@@ -341,13 +359,13 @@ function AdminProductsContent() {
                       ) : (
                         <span className="text-ink/30">-</span>
                       )
-                    ) : p.priceMin != null ? (
-                      p.priceMin === p.priceMax ? formatRupiah(p.priceMin) : `${formatRupiah(p.priceMin)} – ${formatRupiah(p.priceMax!)}`
+                    ) : v.priceMin != null ? (
+                      v.priceMin === v.priceMax ? formatRupiah(v.priceMin) : `${formatRupiah(v.priceMin)} – ${formatRupiah(v.priceMax!)}`
                     ) : (
                       <span className="text-ink/30">Belum ada harga</span>
                     )}
                   </td>
-                  <td className="py-2">{isAdminPoint ? myInventory?.stock ?? "-" : p.totalStock ?? "-"}</td>
+                  <td className="py-2">{isAdminPoint ? myInventory?.stock ?? "-" : v.totalStock ?? "-"}</td>
                   <td className="py-2 text-right">
                     {isAdminPoint ? (
                       myInventory ? (
@@ -441,7 +459,7 @@ function AdminProductsContent() {
                               Atur Stok
                             </button>
                             <button
-                              onClick={() => openHistory(myInventory!.id, myInventory!.productId, p.name)}
+                              onClick={() => openHistory(myInventory!.id, myInventory!.variantId, variantLabel(row))}
                               title="Riwayat & Retur/Rusak/Kadaluarsa"
                               className="rounded-lg bg-accent p-1.5 text-ink/60 hover:bg-primary-light hover:text-primary"
                             >
@@ -483,7 +501,7 @@ function AdminProductsContent() {
                             </>
                           )}
                           <button
-                            onClick={() => handleClaim(p.id)}
+                            onClick={() => handleClaim(v.id)}
                             disabled={claiming}
                             className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
                           >
@@ -497,16 +515,16 @@ function AdminProductsContent() {
                             Batal
                           </button>
                           {!isRDHAdmin && (() => {
-                            const parentInv = parentInventoryOf(p);
+                            const parentInv = parentInventoryOf(v);
                             if (!parentInv || parentInv.basePrice == null) {
-                              return <p className="w-full text-right text-xs text-red-600">RDH induk belum atur harga dasar produk ini — klaim akan ditolak.</p>;
+                              return <p className="w-full text-right text-xs text-red-600">RDH induk belum atur harga dasar varian ini — klaim akan ditolak.</p>;
                             }
                             return <p className="w-full text-right text-xs text-ink/40">Harga dasar RDH: {formatRupiah(parentInv.basePrice)}</p>;
                           })()}
                         </div>
                       ) : (
                         <button
-                          onClick={() => openClaimForm(p.id)}
+                          onClick={() => openClaimForm(v.id)}
                           className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium hover:bg-primary-light hover:text-primary"
                         >
                           <PackageCheck size={13} /> Klaim
@@ -524,9 +542,9 @@ function AdminProductsContent() {
                 </tr>
               );
             })}
-            {visibleProducts?.length === 0 && products && products.length > 0 && (
+            {visibleRows.length === 0 && products && products.length > 0 && (
               <tr>
-                <td colSpan={6} className="py-6 text-center text-sm text-ink/40">
+                <td colSpan={7} className="py-6 text-center text-sm text-ink/40">
                   Tidak ada produk di filter ini.
                 </td>
               </tr>
@@ -553,7 +571,7 @@ function AdminProductsContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setHistoryInv(null)}>
           <div className="card max-h-[85vh] w-full max-w-lg overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-semibold">Riwayat Stok — {historyInv.productName}</h2>
+              <h2 className="font-semibold">Riwayat Stok — {historyInv.label}</h2>
               <button onClick={() => setHistoryInv(null)} className="rounded-lg p-1 hover:bg-accent">
                 <X size={18} />
               </button>

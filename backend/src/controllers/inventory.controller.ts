@@ -4,14 +4,14 @@ import { ok, fail } from "../utils/response";
 import { scopedPointId, resolveWritePointId, canAccessPoint } from "../utils/pointScope";
 import { checkAndCreateRestockRequest } from "../services/restockRequest.service";
 
-// GET /api/inventory?pointId=xxx — daftar stok produk di satu Point (atau semua).
+// GET /api/inventory?pointId=xxx — daftar stok varian produk di satu Point (atau semua).
 // Admin Point otomatis terkunci ke Point-nya sendiri, tidak peduli query yang dikirim.
 export async function listInventory(req: Request, res: Response) {
   const pointId = scopedPointId(req);
   const where = pointId ? { pointId } : {};
   const inventory = await prisma.inventory.findMany({
     where,
-    include: { product: true, point: true },
+    include: { variant: { include: { product: true } }, point: true },
     orderBy: { updatedAt: "desc" },
   });
   return ok(res, inventory);
@@ -23,9 +23,9 @@ export async function inventoryStats(req: Request, res: Response) {
   const invWhere = pointId ? { pointId } : {};
   const [totalProducts, totalSku, outOfStock, allInventory] = await Promise.all([
     prisma.product.count({ where: { isActive: true } }),
-    prisma.product.count({ where: { isActive: true } }), // 1 produk = 1 SKU di model ini
+    prisma.productVariant.count({ where: { isActive: true } }), // Round 18: 1 varian = 1 SKU sungguhan
     prisma.inventory.count({ where: { ...invWhere, stock: 0 } }),
-    prisma.inventory.findMany({ where: invWhere, include: { product: true } }),
+    prisma.inventory.findMany({ where: invWhere, include: { variant: true } }),
   ]);
 
   // Hitung manual "stok menipis" (stock > 0 tapi <= minStock) karena Prisma
@@ -44,59 +44,59 @@ export async function inventoryStats(req: Request, res: Response) {
   });
 }
 
-// POST /api/inventory/stock-in  { productId, pointId, qty, note }
+// POST /api/inventory/stock-in  { variantId, pointId, qty, note }
 // Admin Point: pointId dari body diabaikan, dipaksa pakai Point yang dia kelola.
 export async function stockIn(req: Request, res: Response) {
-  const { productId, qty, note } = req.body;
+  const { variantId, qty, note } = req.body;
   const pointId = resolveWritePointId(req, req.body.pointId);
-  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+  if (!variantId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
-  const inventory = await upsertInventory(productId, pointId, qty);
+  const inventory = await upsertInventory(variantId, pointId, qty);
   await prisma.inventoryHistory.create({
     data: { inventoryId: inventory.id, type: "STOCK_IN", qty, note, createdById: req.user?.userId },
   });
   return ok(res, inventory, "Stok masuk dicatat");
 }
 
-// POST /api/inventory/stock-out  { productId, pointId, qty, note }
+// POST /api/inventory/stock-out  { variantId, pointId, qty, note }
 export async function stockOut(req: Request, res: Response) {
-  const { productId, qty, note } = req.body;
+  const { variantId, qty, note } = req.body;
   const pointId = resolveWritePointId(req, req.body.pointId);
-  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+  if (!variantId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
-  const existing = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
+  const existing = await prisma.inventory.findUnique({ where: { variantId_pointId: { variantId, pointId } } });
   if (!existing || existing.stock < qty) return fail(res, "Stok tidak cukup", 400);
 
-  const inventory = await upsertInventory(productId, pointId, -qty);
+  const inventory = await upsertInventory(variantId, pointId, -qty);
   await prisma.inventoryHistory.create({
     data: { inventoryId: inventory.id, type: "STOCK_OUT", qty, note, createdById: req.user?.userId },
   });
-  await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
+  await checkAndCreateRestockRequest(variantId, pointId).catch(() => {});
   return ok(res, inventory, "Stok keluar dicatat");
 }
 
-// POST /api/inventory/transfer  { productId, fromPointId, toPointId, qty, note }
+// POST /api/inventory/transfer  { variantId, fromPointId, toPointId, qty, note }
 export async function transferStock(req: Request, res: Response) {
-  const { productId, fromPointId, toPointId, qty, note } = req.body;
-  if (!productId || !fromPointId || !toPointId || !qty || qty <= 0) {
+  const { variantId, fromPointId, toPointId, qty, note } = req.body;
+  if (!variantId || !fromPointId || !toPointId || !qty || qty <= 0) {
     return fail(res, "Data tidak lengkap", 422);
   }
   if (fromPointId === toPointId) return fail(res, "Point asal dan tujuan tidak boleh sama", 422);
 
   const source = await prisma.inventory.findUnique({
-    where: { productId_pointId: { productId, pointId: fromPointId } },
+    where: { variantId_pointId: { variantId, pointId: fromPointId } },
   });
   if (!source || source.stock < qty) return fail(res, "Stok di Point asal tidak cukup", 400);
 
   const [fromInv, toInv] = await prisma.$transaction([
     prisma.inventory.update({
-      where: { productId_pointId: { productId, pointId: fromPointId } },
+      where: { variantId_pointId: { variantId, pointId: fromPointId } },
       data: { stock: { decrement: qty } },
     }),
     prisma.inventory.upsert({
-      where: { productId_pointId: { productId, pointId: toPointId } },
+      where: { variantId_pointId: { variantId, pointId: toPointId } },
       update: { stock: { increment: qty } },
-      create: { productId, pointId: toPointId, stock: qty },
+      create: { variantId, pointId: toPointId, stock: qty },
     }),
   ]);
 
@@ -106,27 +106,27 @@ export async function transferStock(req: Request, res: Response) {
       { inventoryId: toInv.id, type: "TRANSFER_IN", qty, note, createdById: req.user?.userId },
     ],
   });
-  await checkAndCreateRestockRequest(productId, fromPointId).catch(() => {});
+  await checkAndCreateRestockRequest(variantId, fromPointId).catch(() => {});
 
   return ok(res, { fromInv, toInv }, "Transfer stok berhasil");
 }
 
-// POST /api/inventory/adjustment  { productId, pointId, newStock, note }
+// POST /api/inventory/adjustment  { variantId, pointId, newStock, note }
 // Dipakai untuk hasil Stock Opname (stok fisik vs sistem berbeda).
 export async function adjustment(req: Request, res: Response) {
-  const { productId, newStock, note } = req.body;
+  const { variantId, newStock, note } = req.body;
   const pointId = resolveWritePointId(req, req.body.pointId);
-  if (!productId || !pointId || newStock == null) return fail(res, "Data tidak lengkap", 422);
+  if (!variantId || !pointId || newStock == null) return fail(res, "Data tidak lengkap", 422);
 
   const existing = await prisma.inventory.upsert({
-    where: { productId_pointId: { productId, pointId } },
+    where: { variantId_pointId: { variantId, pointId } },
     update: {},
-    create: { productId, pointId, stock: 0 },
+    create: { variantId, pointId, stock: 0 },
   });
   const diff = Number(newStock) - existing.stock;
 
   const inventory = await prisma.inventory.update({
-    where: { productId_pointId: { productId, pointId } },
+    where: { variantId_pointId: { variantId, pointId } },
     data: { stock: Number(newStock) },
   });
   await prisma.inventoryHistory.create({
@@ -138,42 +138,43 @@ export async function adjustment(req: Request, res: Response) {
       createdById: req.user?.userId,
     },
   });
-  if (diff < 0) await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
+  if (diff < 0) await checkAndCreateRestockRequest(variantId, pointId).catch(() => {});
   return ok(res, inventory, "Stok disesuaikan");
 }
 
-// POST /api/inventory/claim  { productId, pointId?, qty?, basePrice?, sellPrice?, discountPrice? }
-// Produk selalu diinput terpusat oleh Admin Pusat (lihat product.routes.ts).
-// Tiap Point "mengklaim" produk yang mau mereka jual — ini yang bikin produk
-// itu resmi jadi bagian inventaris Point tersebut. `qty` opsional: kalau diisi,
-// langsung jadi stok awal (tercatat di riwayat inventory); kalau tidak, klaim
-// dulu dengan stok 0 dan diisi belakangan lewat Transfer Stok / Purchase Order.
-// Klaim yang sudah ada tidak dianggap error.
+// POST /api/inventory/claim  { variantId, pointId?, qty?, basePrice?, sellPrice?, discountPrice? }
+// Produk & varian selalu diinput terpusat oleh Admin Pusat (lihat product.routes.ts
+// & variant.controller.ts). Tiap Point "mengklaim" VARIAN yang mau mereka jual — ini
+// yang bikin varian itu resmi jadi bagian inventaris Point tersebut (Round 18: klaim
+// sekarang per varian, bukan per produk, karena tiap varian punya stok/harga sendiri).
+// `qty` opsional: kalau diisi, langsung jadi stok awal (tercatat di riwayat inventory);
+// kalau tidak, klaim dulu dengan stok 0 dan diisi belakangan lewat Transfer Stok /
+// Purchase Order. Klaim yang sudah ada tidak dianggap error.
 //
 // Harga bercabang menurut tipe lokasi:
 //   - RDH: wajib isi `basePrice` (harga dasar) — ini yang jadi acuan harga
 //     buat Mart/Point di bawahnya.
 //   - MART/POINT: wajib isi `sellPrice` (harga jual), `discountPrice` opsional.
-//     RDH induk (`parentHubId`) HARUS sudah klaim & set basePrice produk ini
+//     RDH induk (`parentHubId`) HARUS sudah klaim & set basePrice VARIAN ini
 //     dulu — kalau belum, klaim ditolak. Kalau sellPrice di bawah basePrice
 //     RDH induk, klaim tetap boleh tapi responsnya membawa `belowBasePrice: true`
 //     sebagai tanda peringatan (tidak diblokir).
 export async function claimProduct(req: Request, res: Response) {
-  const { productId, qty } = req.body;
-  if (!productId) return fail(res, "Produk wajib dipilih", 422);
+  const { variantId, qty } = req.body;
+  if (!variantId) return fail(res, "Varian produk wajib dipilih", 422);
   const pointId = resolveWritePointId(req, req.body.pointId);
   if (!pointId) return fail(res, "Point tujuan wajib diisi", 422);
 
-  const product = await prisma.product.findUnique({ where: { id: productId } });
-  if (!product) return fail(res, "Produk tidak ditemukan", 404);
+  const variant = await prisma.productVariant.findUnique({ where: { id: variantId } });
+  if (!variant) return fail(res, "Varian produk tidak ditemukan", 404);
 
   const point = await prisma.fulfillmentPoint.findUnique({ where: { id: pointId } });
   if (!point) return fail(res, "Point tidak ditemukan", 404);
 
   const existing = await prisma.inventory.findUnique({
-    where: { productId_pointId: { productId, pointId } },
+    where: { variantId_pointId: { variantId, pointId } },
   });
-  if (existing) return ok(res, existing, "Produk ini sudah ada di inventaris Point kamu");
+  if (existing) return ok(res, existing, "Varian ini sudah ada di inventaris Point kamu");
 
   let priceData: any = {};
   let belowBasePrice = false;
@@ -185,10 +186,10 @@ export async function claimProduct(req: Request, res: Response) {
   } else {
     if (!point.parentHubId) return fail(res, "Point ini belum terhubung ke RDH induk, hubungi Admin Pusat", 422);
     const parentInv = await prisma.inventory.findUnique({
-      where: { productId_pointId: { productId, pointId: point.parentHubId } },
+      where: { variantId_pointId: { variantId, pointId: point.parentHubId } },
     });
     if (!parentInv || parentInv.basePrice == null) {
-      return fail(res, "RDH induk belum mengklaim/menentukan harga dasar produk ini. Minta RDH klaim & atur harga dasar dulu", 422);
+      return fail(res, "RDH induk belum mengklaim/menentukan harga dasar varian ini. Minta RDH klaim & atur harga dasar dulu", 422);
     }
     const sellPrice = Number(req.body.sellPrice);
     if (!sellPrice || sellPrice <= 0) return fail(res, "Harga jual (sellPrice) wajib diisi", 422);
@@ -199,8 +200,8 @@ export async function claimProduct(req: Request, res: Response) {
 
   const initialStock = Math.max(Number(qty) || 0, 0);
   const inventory = await prisma.inventory.create({
-    data: { productId, pointId, stock: initialStock, minStock: product.minStock, ...priceData },
-    include: { product: true },
+    data: { variantId, pointId, stock: initialStock, minStock: variant.minStock, ...priceData },
+    include: { variant: { include: { product: true } } },
   });
 
   if (initialStock > 0) {
@@ -215,7 +216,7 @@ export async function claimProduct(req: Request, res: Response) {
     });
   }
 
-  return ok(res, { ...inventory, belowBasePrice }, "Produk berhasil diklaim, sekarang jadi bagian inventaris Point kamu", 201);
+  return ok(res, { ...inventory, belowBasePrice }, "Varian berhasil diklaim, sekarang jadi bagian inventaris Point kamu", 201);
 }
 
 // PATCH /api/inventory/:id/price  { basePrice? } (RDH) atau { sellPrice?, discountPrice? } (Mart/Point)
@@ -253,7 +254,7 @@ export async function updatePrice(req: Request, res: Response) {
     }
   }
 
-  const inventory = await prisma.inventory.update({ where: { id }, data, include: { product: true } });
+  const inventory = await prisma.inventory.update({ where: { id }, data, include: { variant: { include: { product: true } } } });
   return ok(res, { ...inventory, belowBasePrice }, "Harga diperbarui");
 }
 
@@ -272,57 +273,57 @@ export async function updateThresholds(req: Request, res: Response) {
   if (maxStock !== undefined) data.maxStock = maxStock === null ? null : Number(maxStock);
   if (safetyStock !== undefined) data.safetyStock = safetyStock === null ? null : Number(safetyStock);
 
-  const inventory = await prisma.inventory.update({ where: { id }, data, include: { product: true } });
+  const inventory = await prisma.inventory.update({ where: { id }, data, include: { variant: { include: { product: true } } } });
   return ok(res, inventory, "Ambang batas stok diperbarui");
 }
 
-// POST /api/inventory/return  { productId, pointId?, qty, note }
+// POST /api/inventory/return  { variantId, pointId?, qty, note }
 // Barang kembali dari customer/lokasi lain — stok BERTAMBAH.
 export async function stockReturn(req: Request, res: Response) {
-  const { productId, qty, note } = req.body;
+  const { variantId, qty, note } = req.body;
   const pointId = resolveWritePointId(req, req.body.pointId);
-  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+  if (!variantId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
-  const inventory = await upsertInventory(productId, pointId, qty);
+  const inventory = await upsertInventory(variantId, pointId, qty);
   await prisma.inventoryHistory.create({
     data: { inventoryId: inventory.id, type: "RETURN", qty, note, createdById: req.user?.userId },
   });
   return ok(res, inventory, "Retur barang dicatat, stok bertambah");
 }
 
-// POST /api/inventory/damage  { productId, pointId?, qty, note }
+// POST /api/inventory/damage  { variantId, pointId?, qty, note }
 // Barang rusak — stok BERKURANG, tidak bisa dijual lagi.
 export async function stockDamage(req: Request, res: Response) {
-  const { productId, qty, note } = req.body;
+  const { variantId, qty, note } = req.body;
   const pointId = resolveWritePointId(req, req.body.pointId);
-  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+  if (!variantId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
-  const existing = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
+  const existing = await prisma.inventory.findUnique({ where: { variantId_pointId: { variantId, pointId } } });
   if (!existing || existing.stock < qty) return fail(res, "Stok tidak cukup", 400);
 
-  const inventory = await upsertInventory(productId, pointId, -qty);
+  const inventory = await upsertInventory(variantId, pointId, -qty);
   await prisma.inventoryHistory.create({
     data: { inventoryId: inventory.id, type: "DAMAGE", qty, note, createdById: req.user?.userId },
   });
-  await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
+  await checkAndCreateRestockRequest(variantId, pointId).catch(() => {});
   return ok(res, inventory, "Barang rusak dicatat, stok berkurang");
 }
 
-// POST /api/inventory/expired  { productId, pointId?, qty, note }
+// POST /api/inventory/expired  { variantId, pointId?, qty, note }
 // Barang kadaluarsa — stok BERKURANG, tidak bisa dijual lagi.
 export async function stockExpired(req: Request, res: Response) {
-  const { productId, qty, note } = req.body;
+  const { variantId, qty, note } = req.body;
   const pointId = resolveWritePointId(req, req.body.pointId);
-  if (!productId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
+  if (!variantId || !pointId || !qty || qty <= 0) return fail(res, "Data tidak lengkap", 422);
 
-  const existing = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
+  const existing = await prisma.inventory.findUnique({ where: { variantId_pointId: { variantId, pointId } } });
   if (!existing || existing.stock < qty) return fail(res, "Stok tidak cukup", 400);
 
-  const inventory = await upsertInventory(productId, pointId, -qty);
+  const inventory = await upsertInventory(variantId, pointId, -qty);
   await prisma.inventoryHistory.create({
     data: { inventoryId: inventory.id, type: "EXPIRED", qty, note, createdById: req.user?.userId },
   });
-  await checkAndCreateRestockRequest(productId, pointId).catch(() => {});
+  await checkAndCreateRestockRequest(variantId, pointId).catch(() => {});
   return ok(res, inventory, "Barang kadaluarsa dicatat, stok berkurang");
 }
 
@@ -342,10 +343,10 @@ export async function getInventoryHistory(req: Request, res: Response) {
   return ok(res, history);
 }
 
-async function upsertInventory(productId: string, pointId: string, delta: number) {
+async function upsertInventory(variantId: string, pointId: string, delta: number) {
   return prisma.inventory.upsert({
-    where: { productId_pointId: { productId, pointId } },
+    where: { variantId_pointId: { variantId, pointId } },
     update: { stock: { increment: delta } },
-    create: { productId, pointId, stock: Math.max(delta, 0) },
+    create: { variantId, pointId, stock: Math.max(delta, 0) },
   });
 }

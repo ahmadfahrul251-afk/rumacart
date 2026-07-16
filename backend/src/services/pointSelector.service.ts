@@ -2,7 +2,7 @@ import { prisma } from "../config/db";
 import { distanceKm } from "../utils/distance";
 
 export interface CartLine {
-  productId: string;
+  variantId: string;
   qty: number;
 }
 
@@ -27,7 +27,7 @@ export interface BackOrderOption {
 export async function pointHasStockForCart(pointId: string, cart: CartLine[]): Promise<boolean> {
   for (const line of cart) {
     const inv = await prisma.inventory.findUnique({
-      where: { productId_pointId: { productId: line.productId, pointId } },
+      where: { variantId_pointId: { variantId: line.variantId, pointId } },
     });
     if (!inv || inv.stock < line.qty) return false;
   }

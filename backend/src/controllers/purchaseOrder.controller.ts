@@ -4,7 +4,7 @@ import { createPurchaseOrder, receivePurchaseOrder, cancelPurchaseOrder } from "
 import { ok, fail } from "../utils/response";
 import { scopedPointId, canAccessPoint } from "../utils/pointScope";
 
-// POST /api/purchase-orders  { supplierId, pointId, notes, items: [{productId, qty, costPrice}] }
+// POST /api/purchase-orders  { supplierId, pointId, notes, items: [{variantId, qty, costPrice}] }
 // Admin Point: pointId dari body diabaikan (dipaksa pakai Point-nya sendiri), dan
 // supplier yang dipilih harus kelihatan buat dia (pusat-wide atau lokal Point-nya).
 // Sesuai arsitektur Hub and Spoke: supplier cuma boleh kirim barang ke RDH — Mart/Point
@@ -59,7 +59,7 @@ export async function listPo(req: Request, res: Response) {
 
   const purchaseOrders = await prisma.purchaseOrder.findMany({
     where,
-    include: { items: true, supplier: true, point: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, supplier: true, point: true },
     orderBy: { createdAt: "desc" },
   });
   return ok(res, purchaseOrders);
@@ -69,7 +69,7 @@ export async function listPo(req: Request, res: Response) {
 export async function getPo(req: Request, res: Response) {
   const po = await prisma.purchaseOrder.findUnique({
     where: { id: req.params.id },
-    include: { items: { include: { product: true } }, supplier: true, point: true, createdBy: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, supplier: true, point: true, createdBy: true },
   });
   if (!po) return fail(res, "Purchase Order tidak ditemukan", 404);
   if (!canAccessPoint(req, po.pointId)) return fail(res, "Purchase Order ini bukan milik Point kamu", 403);

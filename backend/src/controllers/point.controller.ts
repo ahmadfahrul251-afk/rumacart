@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { prisma } from "../config/db";
 import { ok, fail } from "../utils/response";
 import { listEligiblePoints, findBackOrderOption, CartLine } from "../services/pointSelector.service";
+import { withVariantSummary, combineProductSummary } from "./product.controller";
 import { distanceKm } from "../utils/distance";
 
 // GET /api/points?type=RDH — daftar lokasi aktif. `type` opsional (RDH/MART/POINT)
@@ -103,16 +104,24 @@ export async function getPointProducts(req: Request, res: Response) {
   const point = await prisma.fulfillmentPoint.findUnique({ where: { id } });
   if (!point || !point.isActive) return fail(res, "Point tidak ditemukan", 404);
 
+  // Round 18: produk "ready" di lokasi ini = punya minimal 1 varian aktif dengan
+  // baris Inventory di lokasi ini & stok > 0.
   const where: any = {
     isActive: true,
     name: { contains: search, mode: "insensitive" },
-    inventory: { some: { pointId: id, stock: { gt: 0 } } },
+    variants: { some: { isActive: true, inventory: { some: { pointId: id, stock: { gt: 0 } } } } },
   };
 
   const [items, total] = await Promise.all([
     prisma.product.findMany({
       where,
-      include: { category: true, inventory: { where: { pointId: id } } },
+      include: {
+        category: true,
+        variants: {
+          where: { isActive: true, inventory: { some: { pointId: id, stock: { gt: 0 } } } },
+          include: { inventory: { where: { pointId: id } } },
+        },
+      },
       skip,
       take,
       orderBy: { name: "asc" },
@@ -120,17 +129,12 @@ export async function getPointProducts(req: Request, res: Response) {
     prisma.product.count({ where }),
   ]);
 
-  // Bentuk response disamakan dengan withStockSummary() di product.controller.ts
-  // (field `currentPoint`) supaya frontend cukup pakai 1 bentuk Product yang sama.
+  // Bentuk response disamakan dengan withProductSummary() di product.controller.ts
+  // (field `variants[]`, `totalStock`, `priceMin`/`priceMax`) supaya frontend cukup
+  // pakai 1 bentuk Product yang sama, cuma di sini semuanya sudah discope ke 1 lokasi.
   const data = items.map((p: any) => {
-    const inv = p.inventory[0];
-    return {
-      ...p,
-      totalStock: inv?.stock ?? 0,
-      currentPoint: inv
-        ? { pointId: inv.pointId, stock: inv.stock, basePrice: inv.basePrice, sellPrice: inv.sellPrice, discountPrice: inv.discountPrice }
-        : null,
-    };
+    const variants = p.variants.map((v: any) => withVariantSummary(v, id));
+    return combineProductSummary(p, variants);
   });
   return ok(res, { items: data, total, page: Number(page), totalPages: Math.ceil(total / take), point });
 }
@@ -214,7 +218,7 @@ export async function updatePoint(req: Request, res: Response) {
   }
 }
 
-// POST /api/points/eligible  { items: [{productId, qty}], addressId? }
+// POST /api/points/eligible  { items: [{variantId, qty}], addressId? }
 // Dipakai halaman checkout: customer pilih sendiri lokasi tujuan dari daftar
 // yang stoknya cukup untuk keranjangnya. Smart Order Routing: Point diprioritaskan
 // dulu, baru Mart, keduanya diurutkan dari yang terdekat. Kalau Point & Mart
@@ -246,9 +250,9 @@ export async function eligiblePoints(req: Request, res: Response) {
   // bandingkan harga sebelum pilih lokasi. Tidak dilakukan untuk cart multi-item
   // karena "1 harga per Point" jadi ambigu (harga produk mana yang ditampilkan).
   if (items.length === 1 && points.length > 0) {
-    const productId = items[0].productId;
+    const variantId = items[0].variantId;
     const inventoryRows = await prisma.inventory.findMany({
-      where: { productId, pointId: { in: points.map((p) => p.pointId) } },
+      where: { variantId, pointId: { in: points.map((p) => p.pointId) } },
     });
     const invMap = new Map(inventoryRows.map((inv: any) => [inv.pointId, inv]));
     const enriched = points.map((p) => {
@@ -273,7 +277,7 @@ export async function pointsMonitoring(req: Request, res: Response) {
   const { from, to } = req.query as Record<string, string>;
 
   const points = await prisma.fulfillmentPoint.findMany({
-    include: { inventory: { include: { product: true } }, parentHub: { select: { id: true, name: true } } },
+    include: { inventory: { include: { variant: { include: { product: true } } } }, parentHub: { select: { id: true, name: true } } },
     orderBy: { name: "asc" },
   });
 
@@ -295,8 +299,11 @@ export async function pointsMonitoring(req: Request, res: Response) {
     prisma.cashflow.groupBy({ by: ["pointId"], where: cashflowWhere, _sum: { profitAmount: true } }),
     prisma.user.count({ where: { role: "CUSTOMER" } }),
     prisma.user.count({ where: { role: "KURIR" } }),
+    // Round 18: OrderItem sekarang merujuk ke ProductVariant, jadi "produk terlaris"
+    // dihitung per varian (lebih detail — misal "Chitato Sapi Panggang" terpisah
+    // dari "Chitato Balado" — bukan digabung jadi 1 baris "Chitato").
     prisma.orderItem.groupBy({
-      by: ["productId"],
+      by: ["variantId"],
       where: { order: orderWhere },
       _sum: { qty: true, subtotal: true },
       orderBy: { _sum: { qty: "desc" } },
@@ -343,15 +350,23 @@ export async function pointsMonitoring(req: Request, res: Response) {
   }
   const salesByCity = Array.from(cityMap.values()).sort((a, b) => b.revenue - a.revenue);
 
-  const productIds = topProductsRaw.map((t: any) => t.productId);
-  const products = productIds.length ? await prisma.product.findMany({ where: { id: { in: productIds } } }) : [];
-  const productMap = new Map<string, any>(products.map((pr: any) => [pr.id, pr]));
-  const topProducts = topProductsRaw.map((t: any) => ({
-    productId: t.productId,
-    name: productMap.get(t.productId)?.name ?? "-",
-    qtySold: t._sum.qty ?? 0,
-    revenue: t._sum.subtotal ?? 0,
-  }));
+  const variantIds = topProductsRaw.map((t: any) => t.variantId);
+  const topVariants = variantIds.length
+    ? await prisma.productVariant.findMany({ where: { id: { in: variantIds } }, include: { product: true } })
+    : [];
+  const variantMap = new Map<string, any>(topVariants.map((v: any) => [v.id, v]));
+  const topProducts = topProductsRaw.map((t: any) => {
+    const v = variantMap.get(t.variantId);
+    const productName = v?.product?.name ?? "-";
+    const variantName = v?.name;
+    const name = !variantName || variantName === "Default" ? productName : `${productName} (${variantName})`;
+    return {
+      variantId: t.variantId,
+      name,
+      qtySold: t._sum.qty ?? 0,
+      revenue: t._sum.subtotal ?? 0,
+    };
+  });
 
   // Ringkasan jaringan: dipakai stat card di atas tabel (Total Kota/RDH/Mart/Point/Customer/Kurir).
   const summary = {

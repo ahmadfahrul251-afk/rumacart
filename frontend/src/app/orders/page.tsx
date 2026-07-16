@@ -65,7 +65,8 @@ export default function OrdersPage() {
                 <div className="mt-2 space-y-1">
                   {o.items.map((it) => (
                     <p key={it.id} className="text-sm text-ink/70">
-                      {it.product?.name || "Produk"} x{it.qty}
+                      {it.variant?.product?.name || "Produk"}
+                      {it.variant?.name && it.variant.name !== "Default" && <> ({it.variant.name})</>} x{it.qty}
                     </p>
                   ))}
                 </div>

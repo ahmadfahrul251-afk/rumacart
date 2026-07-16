@@ -10,7 +10,7 @@ export interface Category {
 
 export interface Inventory {
   id: string;
-  productId: string;
+  variantId: string;
   pointId: string;
   stock: number;
   minStock: number;
@@ -22,7 +22,7 @@ export interface Inventory {
   sellPrice?: number | null;
   discountPrice?: number | null;
   point?: FulfillmentPoint;
-  product?: Product;
+  variant?: ProductVariant;
 }
 
 export type InventoryMoveType =
@@ -53,7 +53,7 @@ export interface RestockRequest {
   id: string;
   requestNumber: string;
   pointId: string;
-  productId: string;
+  variantId: string;
   qty: number;
   status: RestockRequestStatus;
   sourceHubId?: string | null;
@@ -65,7 +65,38 @@ export interface RestockRequest {
   fulfilledAt?: string | null;
   point?: FulfillmentPoint;
   sourceHub?: FulfillmentPoint | null;
+  variant?: ProductVariant;
+}
+
+// Round 18: fitur Varian Produk. Product cuma "induk" (nama, kategori, brand,
+// kata kunci) — SKU/barcode/dimensi/harga/stok ada di ProductVariant &
+// Inventory di bawahnya. Tiap Product minimal punya 1 varian (kalau produknya
+// tidak punya rasa/ukuran lain, variannya cuma 1 dan dinamai "Default").
+export interface ProductVariant {
+  id: string;
+  productId: string;
+  name: string; // contoh: "Original", "Pedas", "85g", "Karton isi 40", atau "Default"
+  sku: string;
+  barcode?: string | null;
+  weightGram: number;
+  lengthCm?: number | null;
+  widthCm?: number | null;
+  heightCm?: number | null;
+  minStock: number;
+  image?: string | null;
+  isActive?: boolean;
+  createdAt?: string;
   product?: Product;
+  inventory?: Inventory[];
+  totalStock?: number;
+  // Rentang harga lintas lokasi (dihitung backend dari Inventory.sellPrice/
+  // discountPrice tiap lokasi yang sudah klaim & atur harga varian ini) — null
+  // kalau belum ada satupun Mart/Point yang klaim+atur harga varian ini.
+  priceMin?: number | null;
+  priceMax?: number | null;
+  // Cuma terisi kalau request-nya point-scoped (?pointId= atau lewat
+  // /points/:id/products) — harga & stok spesifik 1 lokasi itu.
+  currentPoint?: { pointId: string; stock: number; basePrice: number | null; sellPrice: number | null; discountPrice: number | null } | null;
 }
 
 export interface Product {
@@ -75,26 +106,16 @@ export interface Product {
   description?: string | null;
   brand?: string | null;
   categoryId?: string;
-  sku: string;
-  barcode?: string | null;
-  weightGram: number;
-  lengthCm?: number | null;
-  widthCm?: number | null;
-  heightCm?: number | null;
   searchKeywords?: string | null;
-  minStock?: number;
+  minStock?: number; // nilai default dipakai saat bikin ProductVariant baru
   images: string[];
   category?: Category;
-  inventory?: Inventory[];
+  variants?: ProductVariant[];
   totalStock?: number;
-  // Rentang harga lintas lokasi (dihitung backend dari Inventory.sellPrice/
-  // discountPrice tiap lokasi yang sudah klaim & atur harga) — null kalau
-  // belum ada satupun Mart/Point yang klaim+atur harga produk ini.
+  // Rentang harga GABUNGAN lintas semua varian x semua lokasi — null kalau
+  // belum ada satupun varian yang diklaim+diatur harganya.
   priceMin?: number | null;
   priceMax?: number | null;
-  // Cuma terisi kalau request-nya point-scoped (?pointId= atau lewat
-  // /points/:id/products) — harga & stok spesifik 1 lokasi itu.
-  currentPoint?: { pointId: string; stock: number; basePrice: number | null; sellPrice: number | null; discountPrice: number | null } | null;
   avgRating?: number;
   totalReviews?: number;
 }
@@ -172,7 +193,7 @@ export interface NetworkSummary {
 }
 
 export interface TopProduct {
-  productId: string;
+  variantId: string;
   name: string;
   qtySold: number;
   revenue: number;
@@ -193,9 +214,11 @@ export interface Address {
   kecamatan?: string | null; // dipakai cocokkan jangkauan pengiriman (DeliveryArea) tiap Point
   city: string;
   province: string;
+  postalCode?: string | null;
   latitude?: number | null;
   longitude?: number | null;
   isDefault: boolean;
+  createdAt?: string;
 }
 
 // Area jangkauan kurir 1 Point (per kecamatan) + biayanya — diatur Admin
@@ -252,11 +275,11 @@ export type OrderStatus =
 
 export interface OrderItem {
   id: string;
-  productId: string;
+  variantId: string;
   qty: number;
   price: number;
   subtotal: number;
-  product?: Product;
+  variant?: ProductVariant;
 }
 
 export type PaymentStatus = "PENDING" | "AWAITING_VERIFICATION" | "PAID" | "FAILED";
@@ -322,6 +345,7 @@ export interface User {
   name: string;
   email: string;
   phone?: string | null;
+  image?: string | null;
   role: Role;
   managedPointId?: string | null;
   managedPoint?: { id: string; name: string; code: string; type: LocationType; parentHubId?: string | null } | null;
@@ -345,11 +369,11 @@ export type PurchaseOrderStatus = "DRAFT" | "ORDERED" | "RECEIVED" | "CANCELLED"
 
 export interface PurchaseOrderItem {
   id: string;
-  productId: string;
+  variantId: string;
   qty: number;
   costPrice: number;
   subtotal: number;
-  product?: Product;
+  variant?: ProductVariant;
 }
 
 export interface PurchaseOrder {
@@ -371,9 +395,9 @@ export type StockTransferStatus = "SENT" | "RECEIVED" | "CANCELLED";
 
 export interface StockTransferItem {
   id: string;
-  productId: string;
+  variantId: string;
   qty: number;
-  product?: Product;
+  variant?: ProductVariant;
 }
 
 export interface StockTransfer {
@@ -421,8 +445,11 @@ export interface Notification {
 }
 
 // Dipakai Keranjang Terencana (belum pilih Point, cuma daftar rencana belanja).
+// Round 18: menyimpan variantId (bukan productId) karena harga/stok sekarang
+// per varian — `name` sudah digabung "Nama Produk (Nama Varian)" oleh
+// pemanggil saat item ditambahkan (kecuali varian "Default", cukup nama produknya).
 export interface CartItem {
-  productId: string;
+  variantId: string;
   name: string;
   price: number;
   image?: string;

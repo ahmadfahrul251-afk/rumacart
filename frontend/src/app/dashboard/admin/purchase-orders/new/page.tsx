@@ -9,13 +9,20 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
-import { Supplier, FulfillmentPoint, Product } from "@/types";
+import { Supplier, FulfillmentPoint, Product, ProductVariant } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
 interface ItemRow {
-  productId: string;
+  variantId: string;
   qty: number;
   costPrice: number;
+}
+
+interface VariantOption { product: Product; variant: ProductVariant; }
+
+function variantLabel(o: VariantOption) {
+  const name = !o.variant.name || o.variant.name === "Default" ? o.product.name : `${o.product.name} (${o.variant.name})`;
+  return `${name} — ${o.variant.sku}`;
 }
 
 function NewPurchaseOrderContent() {
@@ -30,9 +37,13 @@ function NewPurchaseOrderContent() {
   const [supplierId, setSupplierId] = useState("");
   const [pointId, setPointId] = useState("");
   const [notes, setNotes] = useState("");
-  const [items, setItems] = useState<ItemRow[]>([{ productId: "", qty: 1, costPrice: 0 }]);
+  const [items, setItems] = useState<ItemRow[]>([{ variantId: "", qty: 1, costPrice: 0 }]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Round 18: PO diinput per VARIAN, bukan per produk — flatten daftar produk
+  // jadi daftar varian buat dropdown item.
+  const variantOptions: VariantOption[] = products.flatMap((p) => (p.variants || []).map((v) => ({ product: p, variant: v })));
 
   // Sesuai arsitektur Hub and Spoke: supplier cuma boleh kirim barang ke RDH,
   // jadi dropdown Point tujuan cuma nampilin lokasi bertipe RDH.
@@ -57,19 +68,19 @@ function NewPurchaseOrderContent() {
   }
 
   function addRow() {
-    setItems((prev) => [...prev, { productId: "", qty: 1, costPrice: 0 }]);
+    setItems((prev) => [...prev, { variantId: "", qty: 1, costPrice: 0 }]);
   }
 
   function removeRow(index: number) {
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function handleProductChange(index: number, productId: string) {
-    const product = products.find((p) => p.id === productId);
+  function handleVariantChange(index: number, variantId: string) {
+    const option = variantOptions.find((o) => o.variant.id === variantId);
     // Saran harga beli: pakai basePrice (harga dasar) RDH tujuan yang sudah
     // pernah diklaim/di-set sebelumnya — bukan lagi 1 harga global di Product.
-    const suggestedCost = product?.inventory?.find((inv) => inv.pointId === pointId)?.basePrice ?? 0;
-    updateItem(index, { productId, costPrice: suggestedCost });
+    const suggestedCost = option?.variant.inventory?.find((inv) => inv.pointId === pointId)?.basePrice ?? 0;
+    updateItem(index, { variantId, costPrice: suggestedCost });
   }
 
   const total = items.reduce((sum, row) => sum + row.qty * row.costPrice, 0);
@@ -81,7 +92,7 @@ function NewPurchaseOrderContent() {
       setError("Supplier dan Point tujuan wajib dipilih");
       return;
     }
-    const validItems = items.filter((row) => row.productId && row.qty > 0);
+    const validItems = items.filter((row) => row.variantId && row.qty > 0);
     if (validItems.length === 0) {
       setError("Tambahkan minimal 1 produk");
       return;
@@ -166,19 +177,19 @@ function NewPurchaseOrderContent() {
         <div className="card space-y-3">
           <h2 className="font-semibold">Item Barang</h2>
           {items.map((row, i) => {
-            const product = products.find((p) => p.id === row.productId);
+            const option = variantOptions.find((o) => o.variant.id === row.variantId);
             return (
               <div key={i} className="grid grid-cols-12 items-end gap-2">
                 <div className="col-span-5">
-                  <label className="mb-1 block text-xs text-ink/50">Produk</label>
+                  <label className="mb-1 block text-xs text-ink/50">Produk (Varian)</label>
                   <select
-                    value={row.productId}
-                    onChange={(e) => handleProductChange(i, e.target.value)}
+                    value={row.variantId}
+                    onChange={(e) => handleVariantChange(i, e.target.value)}
                     className="w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   >
                     <option value="">Pilih produk</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                    {variantOptions.map((o) => (
+                      <option key={o.variant.id} value={o.variant.id}>{variantLabel(o)}</option>
                     ))}
                   </select>
                 </div>
@@ -201,7 +212,7 @@ function NewPurchaseOrderContent() {
                   />
                 </div>
                 <div className="col-span-1 pb-2.5 text-right text-xs text-ink/50">
-                  {product ? formatRupiah(row.qty * row.costPrice) : ""}
+                  {option ? formatRupiah(row.qty * row.costPrice) : ""}
                 </div>
                 <div className="col-span-1 flex justify-end">
                   <button

@@ -6,8 +6,8 @@ import { BuyNowItem } from "@/types";
 interface CartContextValue {
   items: BuyNowItem[];
   addItem: (item: BuyNowItem) => void;
-  updateQty: (productId: string, pointId: string, qty: number) => void;
-  removeItem: (productId: string, pointId: string) => void;
+  updateQty: (variantId: string, pointId: string, qty: number) => void;
+  removeItem: (variantId: string, pointId: string) => void;
   removeByPoint: (pointId: string) => void;
   clearCart: () => void;
   subtotal: number;
@@ -19,9 +19,10 @@ const STORAGE_KEY = "rumacart_cart";
 // Keranjang "Beli Sekarang" — disimpan di localStorage (bukan database) supaya
 // tetap ada walau belum login ("guest cart"). Bedanya dari sebelumnya: tiap
 // item sekarang terikat ke 1 Point (dipilih customer saat "Tambah ke
-// Keranjang" di halaman produk, bukan lagi pas checkout). Karena itu, 1 produk
+// Keranjang" di halaman produk, bukan lagi pas checkout). Karena itu, 1 varian
 // yang sama bisa muncul 2x di keranjang kalau diambil dari 2 Point berbeda —
-// makanya kunci baris berubah dari cuma `productId` jadi `productId+pointId`.
+// makanya kunci baris berubah dari cuma `variantId` jadi `variantId+pointId`.
+// (Round 18: kunci per varian, bukan per produk, karena harga/stok kini per varian.)
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<BuyNowItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -38,26 +39,26 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   function addItem(item: BuyNowItem) {
     setItems((prev) => {
-      const existing = prev.find((i) => i.productId === item.productId && i.pointId === item.pointId);
+      const existing = prev.find((i) => i.variantId === item.variantId && i.pointId === item.pointId);
       if (existing) {
         return prev.map((i) =>
-          i.productId === item.productId && i.pointId === item.pointId ? { ...i, qty: i.qty + item.qty } : i
+          i.variantId === item.variantId && i.pointId === item.pointId ? { ...i, qty: i.qty + item.qty } : i
         );
       }
       return [...prev, item];
     });
   }
 
-  function updateQty(productId: string, pointId: string, qty: number) {
+  function updateQty(variantId: string, pointId: string, qty: number) {
     setItems((prev) =>
       qty <= 0
-        ? prev.filter((i) => !(i.productId === productId && i.pointId === pointId))
-        : prev.map((i) => (i.productId === productId && i.pointId === pointId ? { ...i, qty } : i))
+        ? prev.filter((i) => !(i.variantId === variantId && i.pointId === pointId))
+        : prev.map((i) => (i.variantId === variantId && i.pointId === pointId ? { ...i, qty } : i))
     );
   }
 
-  function removeItem(productId: string, pointId: string) {
-    setItems((prev) => prev.filter((i) => !(i.productId === productId && i.pointId === pointId)));
+  function removeItem(variantId: string, pointId: string) {
+    setItems((prev) => prev.filter((i) => !(i.variantId === variantId && i.pointId === pointId)));
   }
 
   // Dipakai checkout: setelah 1 grup Point berhasil jadi Order, hapus grup itu

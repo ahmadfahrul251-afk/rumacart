@@ -1,18 +1,26 @@
 import { Request, Response } from "express";
 import { prisma } from "../config/db";
 import { ok, fail } from "../utils/response";
+import { withVariantSummary, combineProductSummary } from "./product.controller";
 
-// GET /api/wishlist — daftar produk yang di-wishlist user yang sedang login
+// GET /api/wishlist — daftar produk yang di-wishlist user yang sedang login.
+// Round 18: stok/harga sekarang ada di ProductVariant, jadi ringkasannya
+// dihitung lewat helper yang sama dipakai listProducts, biar ProductCard
+// dapat bentuk data yang konsisten (variants[] + priceMin/priceMax/totalStock).
 export async function listWishlist(req: Request, res: Response) {
   const items = await prisma.wishlist.findMany({
     where: { userId: req.user!.userId },
-    include: { product: { include: { category: true, inventory: true } } },
+    include: {
+      product: {
+        include: { category: true, variants: { where: { isActive: true }, include: { inventory: true } } },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
   const products = items.map((item: any) => {
-    const totalStock = item.product.inventory.reduce((sum: number, inv: any) => sum + inv.stock, 0);
-    return { ...item.product, totalStock, wishlistId: item.id };
+    const variants = (item.product.variants || []).map((v: any) => withVariantSummary(v));
+    return { ...combineProductSummary(item.product, variants), wishlistId: item.id };
   });
 
   return ok(res, products);

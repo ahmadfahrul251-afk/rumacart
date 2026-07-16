@@ -41,7 +41,7 @@ export async function checkout(req: Request, res: Response) {
 export async function myOrders(req: Request, res: Response) {
   const orders = await prisma.order.findMany({
     where: { customerId: req.user!.userId },
-    include: { items: { include: { product: true } }, point: true, payment: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, point: true, payment: true },
     orderBy: { createdAt: "desc" },
   });
   return ok(res, orders);
@@ -54,7 +54,7 @@ export async function trackOrder(req: Request, res: Response) {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
     include: {
-      items: { include: { product: true } },
+      items: { include: { variant: { include: { product: true } } } },
       point: true,
       address: true,
       payment: true,
@@ -77,7 +77,7 @@ export async function listOrders(req: Request, res: Response) {
 
   const orders = await prisma.order.findMany({
     where,
-    include: { items: { include: { product: true } }, point: true, customer: true, payment: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, point: true, customer: true, payment: true },
     orderBy: { createdAt: "desc" },
   });
   return ok(res, orders);
@@ -87,7 +87,7 @@ export async function listOrders(req: Request, res: Response) {
 export async function getOrder(req: Request, res: Response) {
   const order = await prisma.order.findUnique({
     where: { id: req.params.id },
-    include: { items: { include: { product: true } }, point: true, customer: true, address: true, payment: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, point: true, customer: true, address: true, payment: true },
   });
   if (!order) return fail(res, "Order tidak ditemukan", 404);
   if (!canAccessPoint(req, order.pointId)) return fail(res, "Order ini bukan milik Point kamu", 403);
@@ -200,7 +200,7 @@ export async function listAwaitingVerification(req: Request, res: Response) {
 
   const orders = await prisma.order.findMany({
     where,
-    include: { items: { include: { product: true } }, point: true, customer: true, payment: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, point: true, customer: true, payment: true },
     orderBy: { createdAt: "asc" },
   });
   return ok(res, orders);

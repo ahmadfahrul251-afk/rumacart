@@ -105,14 +105,30 @@ export default function PointDetailPage() {
           {!products && Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="aspect-[3/4]" />)}
           {products?.map((p) => {
             if (!point) return null;
-            const cp = p.currentPoint;
-            const price = cp?.discountPrice ?? cp?.sellPrice ?? cp?.basePrice;
-            if (price == null) return null; // belum diatur harga jualnya, jangan ditampilkan bisa dibeli
+            // p.priceMin di sini sudah point-scoped (dari GET /points/:id/products),
+            // jadi aman dipakai buat cek "belum diatur harga jual" walau produk
+            // punya beberapa varian. `fixedPoint` (buat skip PointPickerModal)
+            // cuma diisi kalau produknya cuma 1 varian — kalau lebih dari 1,
+            // ProductCard otomatis arahkan ke halaman detail buat pilih varian dulu.
+            if (p.priceMin == null) return null; // belum diatur harga jualnya, jangan ditampilkan bisa dibeli
+            const variants = p.variants || [];
+            const singleVariant = variants.length === 1 ? variants[0] : null;
+            const cp = singleVariant?.currentPoint;
             return (
               <ProductCard
                 key={p.id}
                 product={p}
-                fixedPoint={{ pointId: point.id, name: point.name, code: point.code, price, originalPrice: cp?.discountPrice != null ? cp.sellPrice : null }}
+                fixedPoint={
+                  singleVariant && cp
+                    ? {
+                        pointId: point.id,
+                        name: point.name,
+                        code: point.code,
+                        price: cp.discountPrice ?? cp.sellPrice ?? cp.basePrice ?? p.priceMin,
+                        originalPrice: cp.discountPrice != null ? cp.sellPrice : null,
+                      }
+                    : undefined
+                }
               />
             );
           })}

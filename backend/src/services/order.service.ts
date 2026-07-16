@@ -73,22 +73,22 @@ export async function createOrder(input: CreateOrderInput) {
   //    (basePrice) supaya bisa dipisahkan dari keuntungan nanti, dan dipakai
   //    untuk deteksi "jual di bawah modal".
   const inventoryRows = await prisma.inventory.findMany({
-    where: { pointId, productId: { in: input.items.map((i) => i.productId) } },
+    where: { pointId, variantId: { in: input.items.map((i) => i.variantId) } },
   });
-  const invMap = new Map(inventoryRows.map((inv: any) => [inv.productId, inv]));
+  const invMap = new Map(inventoryRows.map((inv: any) => [inv.variantId, inv]));
 
   let subtotal = 0;
   let costTotal = 0;
   const orderItemsData = input.items.map((line) => {
-    const inv: any = invMap.get(line.productId);
-    if (!inv) throw new Error(`Produk ${line.productId} tidak tersedia di lokasi ini`);
+    const inv: any = invMap.get(line.variantId);
+    if (!inv) throw new Error(`Produk ${line.variantId} tidak tersedia di lokasi ini`);
     const price = inv.discountPrice ?? inv.sellPrice ?? inv.basePrice;
     if (price == null) throw new Error(`Harga produk di lokasi ini belum diatur`);
     const cost = inv.basePrice ?? 0;
     const lineSubtotal = price * line.qty;
     subtotal += lineSubtotal;
     costTotal += cost * line.qty;
-    return { productId: line.productId, qty: line.qty, price, subtotal: lineSubtotal };
+    return { variantId: line.variantId, qty: line.qty, price, subtotal: lineSubtotal };
   });
 
   // 5. Voucher (opsional, mendukung potongan flat maupun persen dengan batas maksimal).
@@ -151,7 +151,7 @@ export async function createOrder(input: CreateOrderInput) {
 
     for (const line of input.items) {
       const inv = await tx.inventory.update({
-        where: { productId_pointId: { productId: line.productId, pointId } },
+        where: { variantId_pointId: { variantId: line.variantId, pointId } },
         data: { stock: { decrement: line.qty } },
       });
       await tx.inventoryHistory.create({
@@ -202,7 +202,7 @@ export async function createOrder(input: CreateOrderInput) {
   //    Dijalankan di luar transaction utama (bukan bagian kritis checkout — kalau
   //    gagal pun order tetap sukses, cuma restock request-nya tidak sempat dibuat).
   for (const line of input.items) {
-    await checkAndCreateRestockRequest(line.productId, pointId).catch(() => {});
+    await checkAndCreateRestockRequest(line.variantId, pointId).catch(() => {});
   }
 
   return order;

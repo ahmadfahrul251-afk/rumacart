@@ -30,7 +30,7 @@ export function ProductCard({ product, fixedPoint }: Props) {
 
   // Harga tampilan: kalau fixedPoint ada, pakai harga pasti di lokasi itu. Kalau
   // browsing katalog umum (belum pilih lokasi), tampilkan RENTANG harga
-  // (priceMin-priceMax) dari semua lokasi yang sudah klaim & atur harga.
+  // (priceMin-priceMax) gabungan semua varian x semua lokasi yang sudah klaim & atur harga.
   const displayPrice = fixedPoint?.price ?? product.priceMin ?? null;
   const hasDiscount = fixedPoint
     ? fixedPoint.originalPrice != null && fixedPoint.originalPrice > fixedPoint.price
@@ -40,6 +40,16 @@ export function ProductCard({ product, fixedPoint }: Props) {
   const wishlisted = isWishlisted(product.id);
   const [showPicker, setShowPicker] = useState(false);
   const [savedPlanned, setSavedPlanned] = useState(false);
+
+  // Round 18: kartu produk cuma bisa langsung "Beli Sekarang"/simpan ke rencana
+  // kalau produknya cuma punya 1 varian (implisit dipilih otomatis). Kalau
+  // punya beberapa varian (rasa/ukuran berbeda), customer harus pilih varian
+  // dulu di halaman detail — tombol di sini navigasi ke sana.
+  const variants = product.variants || [];
+  const singleVariant = variants.length === 1 ? variants[0] : null;
+  const hasMultipleVariants = variants.length > 1;
+  const variantLabel = (name: string, variantName?: string) =>
+    !variantName || variantName === "Default" ? name : `${name} (${variantName})`;
 
   function handleWishlistClick(e: React.MouseEvent) {
     e.preventDefault(); // jangan ikut navigasi ke halaman detail produk
@@ -52,9 +62,13 @@ export function ProductCard({ product, fixedPoint }: Props) {
 
   function handleSaveToPlanned(e: React.MouseEvent) {
     e.preventDefault();
+    if (hasMultipleVariants || !singleVariant) {
+      router.push(`/products/${product.slug}`);
+      return;
+    }
     addPlanned({
-      productId: product.id,
-      name: product.name,
+      variantId: singleVariant.id,
+      name: variantLabel(product.name, singleVariant.name),
       price: fixedPoint?.price ?? product.priceMin ?? 0,
       image: product.images?.[0],
       qty: 1,
@@ -116,10 +130,14 @@ export function ProductCard({ product, fixedPoint }: Props) {
           <button
             disabled={outOfStock || displayPrice == null}
             onClick={() => {
+              if (hasMultipleVariants || !singleVariant) {
+                router.push(`/products/${product.slug}`);
+                return;
+              }
               if (fixedPoint) {
                 addItem({
-                  productId: product.id,
-                  name: product.name,
+                  variantId: singleVariant.id,
+                  name: variantLabel(product.name, singleVariant.name),
                   price: fixedPoint.price,
                   image: product.images?.[0],
                   qty: 1,
@@ -145,16 +163,16 @@ export function ProductCard({ product, fixedPoint }: Props) {
         </div>
       </div>
 
-      {showPicker && (
+      {showPicker && singleVariant && (
         <PointPickerModal
-          productId={product.id}
-          productName={product.name}
+          variantId={singleVariant.id}
+          productName={variantLabel(product.name, singleVariant.name)}
           qty={1}
           onClose={() => setShowPicker(false)}
           onConfirm={(point) => {
             addItem({
-              productId: product.id,
-              name: product.name,
+              variantId: singleVariant.id,
+              name: variantLabel(product.name, singleVariant.name),
               price: point.price ?? product.priceMin ?? 0,
               image: product.images?.[0],
               qty: 1,

@@ -3,14 +3,20 @@ import { prisma } from "../config/db";
 import { ok, fail } from "../utils/response";
 
 // GET /api/products?search=&category=&page=&limit=&sort=
-// Query publik untuk katalog customer — hanya produk aktif. Harga TIDAK lagi
-// ada di Product, jadi tiap item dilengkapi priceMin/priceMax (rentang harga
-// dari semua Mart/Point yang sudah klaim & atur harga jual produk ini).
-// Catatan: sort price_asc/price_desc disortir di JS (bukan query DB) karena
-// harga sekarang tersebar di Inventory (per lokasi), bukan 1 kolom di Product.
+// Query publik untuk katalog customer — hanya produk aktif. Product sekarang
+// cuma "induk" (nama, kategori, brand, keywords) — SKU/barcode/dimensi/harga/
+// stok ada di ProductVariant & Inventory (Round 18: fitur Varian Produk).
+// Tiap item balasan bawa `variants[]` (masing-masing sudah dilengkapi
+// priceMin/priceMax/totalStock sendiri) plus priceMin/priceMax/totalStock
+// GABUNGAN di level Product (dipakai kartu katalog sebelum customer pilih
+// varian). Sort price_asc/price_desc tetap disortir di JS.
 const SORT_OPTIONS: Record<string, any> = {
   newest: { createdAt: "desc" },
   name_asc: { name: "asc" },
+};
+
+const VARIANT_INCLUDE = {
+  variants: { where: { isActive: true }, include: { inventory: true } },
 };
 
 export async function listProducts(req: Request, res: Response) {
@@ -35,25 +41,26 @@ export async function listProducts(req: Request, res: Response) {
     const [items, total] = await Promise.all([
       prisma.product.findMany({
         where,
-        include: { category: true, inventory: true },
+        include: { category: true, ...VARIANT_INCLUDE },
         skip,
         take,
         orderBy: SORT_OPTIONS[sort] || SORT_OPTIONS.newest,
       }),
       prisma.product.count({ where }),
     ]);
-    const data = items.map((p: any) => withStockSummary(p));
+    const data = items.map((p: any) => withProductSummary(p));
     return ok(res, { items: data, total, page: Number(page), totalPages: Math.ceil(total / take) });
   }
 
-  // Sort harga: ambil semua yang cocok filter, hitung rentang harga, urutkan
-  // di JS, baru dipotong per halaman. Skala data produk masih kecil jadi aman.
+  // Sort harga: ambil semua yang cocok filter, hitung rentang harga (gabungan
+  // semua varian x semua lokasi), urutkan di JS, baru dipotong per halaman.
+  // Skala data produk masih kecil jadi aman.
   const all = await prisma.product.findMany({
     where,
-    include: { category: true, inventory: true },
+    include: { category: true, ...VARIANT_INCLUDE },
     orderBy: { createdAt: "desc" },
   });
-  const withPrice = all.map((p: any) => withStockSummary(p));
+  const withPrice = all.map((p: any) => withProductSummary(p));
   withPrice.sort((a: any, b: any) => {
     const pa = a.priceMin ?? Infinity;
     const pb = b.priceMin ?? Infinity;
@@ -64,27 +71,15 @@ export async function listProducts(req: Request, res: Response) {
   return ok(res, { items: data, total, page: Number(page), totalPages: Math.ceil(total / take) });
 }
 
-// GET /api/products/barcode/:code?pointId=
-// Exact match, dipakai POS Kasir saat scan barcode. Kalau pointId dikirim,
-// sertakan harga & stok spesifik lokasi itu (currentPoint) — dipakai Kasir
-// supaya harga yang dipakai jual selalu harga lokasi Kasir sendiri.
-export async function getProductByBarcode(req: Request, res: Response) {
-  const { code } = req.params;
-  const { pointId } = req.query as Record<string, string>;
-  const product = await prisma.product.findFirst({
-    where: { barcode: code, isActive: true },
-    include: { category: true, inventory: true },
-  });
-  if (!product) return fail(res, "Produk dengan barcode ini tidak ditemukan", 404);
-  return ok(res, withStockSummary(product, pointId));
-}
-
 export async function getProductBySlug(req: Request, res: Response) {
   const { slug } = req.params;
   const { pointId } = req.query as Record<string, string>;
   const product = await prisma.product.findUnique({
     where: { slug },
-    include: { category: true, inventory: { include: { point: true } } },
+    include: {
+      category: true,
+      variants: { where: { isActive: true }, include: { inventory: { include: { point: true } } } },
+    },
   });
   if (!product) return fail(res, "Produk tidak ditemukan", 404);
 
@@ -97,48 +92,67 @@ export async function getProductBySlug(req: Request, res: Response) {
   });
 
   return ok(res, {
-    ...withStockSummary(product, pointId),
+    ...withProductSummary(product, pointId),
     avgRating: ratingAgg._avg.rating ? Math.round(ratingAgg._avg.rating * 10) / 10 : 0,
     totalReviews: ratingAgg._count.rating,
   });
 }
 
+// POST /api/products  { name, categoryId, ..., sku, barcode?, weightGram?, ... }
+// Sekalian bikin varian PERTAMA-nya dalam 1 request (biar alur "Tambah
+// Produk" tetap 1 langkah kayak sebelum ada fitur Varian). Varian tambahan
+// lain (rasa/ukuran lain) ditambah belakangan lewat "Kelola Varian" di
+// halaman edit produk (lihat variant.controller.ts).
 export async function createProduct(req: Request, res: Response) {
   const body = req.body;
-  if (!body.name || !body.sku || !body.categoryId) {
-    return fail(res, "name, sku, dan categoryId wajib diisi", 422);
+  if (!body.name || !body.categoryId) {
+    return fail(res, "name dan categoryId wajib diisi", 422);
+  }
+  if (!body.sku) {
+    return fail(res, "SKU varian pertama wajib diisi", 422);
   }
   const slug = body.slug || slugify(body.name);
-  const product = await prisma.product.create({
-    data: {
-      name: body.name,
-      slug,
-      description: body.description,
-      categoryId: body.categoryId,
-      brand: body.brand,
-      sku: body.sku,
-      barcode: body.barcode,
-      weightGram: Number(body.weightGram) || 0,
-      lengthCm: body.lengthCm ? Number(body.lengthCm) : null,
-      widthCm: body.widthCm ? Number(body.widthCm) : null,
-      heightCm: body.heightCm ? Number(body.heightCm) : null,
-      searchKeywords: body.searchKeywords || null,
-      minStock: Number(body.minStock) || 5,
-      images: body.images || [],
-    },
+
+  const product = await prisma.$transaction(async (tx: any) => {
+    const p = await tx.product.create({
+      data: {
+        name: body.name,
+        slug,
+        description: body.description,
+        categoryId: body.categoryId,
+        brand: body.brand,
+        searchKeywords: body.searchKeywords || null,
+        minStock: Number(body.minStock) || 5,
+        images: body.images || [],
+      },
+    });
+    await tx.productVariant.create({
+      data: {
+        productId: p.id,
+        name: body.variantName || "Default",
+        sku: body.sku,
+        barcode: body.barcode || null,
+        weightGram: Number(body.weightGram) || 0,
+        lengthCm: body.lengthCm ? Number(body.lengthCm) : null,
+        widthCm: body.widthCm ? Number(body.widthCm) : null,
+        heightCm: body.heightCm ? Number(body.heightCm) : null,
+        minStock: Number(body.minStock) || 5,
+      },
+    });
+    return p;
   });
-  return ok(res, product, "Produk dibuat", 201);
+
+  return ok(res, product, "Produk & varian pertama dibuat", 201);
 }
 
 export async function updateProduct(req: Request, res: Response) {
   const { id } = req.params;
   const body = req.body;
-  // Whitelist field yang boleh diubah dari sini — harga TIDAK di sini lagi
-  // (harga diatur per lokasi lewat endpoint klaim/atur harga di inventory).
+  // Whitelist field level Product saja — SKU/barcode/dimensi/harga ada di
+  // ProductVariant, diubah lewat endpoint varian (variant.controller.ts).
   const data: any = {};
   for (const field of [
-    "name", "slug", "description", "categoryId", "brand", "sku", "barcode",
-    "weightGram", "lengthCm", "widthCm", "heightCm", "searchKeywords",
+    "name", "slug", "description", "categoryId", "brand", "searchKeywords",
     "minStock", "images", "isActive",
   ]) {
     if (body[field] !== undefined) data[field] = body[field];
@@ -153,12 +167,13 @@ export async function deleteProduct(req: Request, res: Response) {
   return ok(res, null, "Produk dihapus");
 }
 
-// Hitung ringkasan stok + rentang harga dari semua baris Inventory (lintas
-// lokasi). priceMin/priceMax cuma dihitung dari lokasi yang sudah punya
-// sellPrice (Mart/Point yang sudah "Atur Harga") — RDH tidak dihitung karena
-// RDH cuma punya basePrice, tidak jual langsung ke customer.
-function withStockSummary(product: any, pointId?: string) {
-  const inventory = product.inventory || [];
+// Hitung ringkasan 1 varian: total stok & rentang harga lintas lokasi (cuma
+// dari lokasi yang sudah klaim & atur sellPrice — RDH tidak dihitung karena
+// RDH cuma punya basePrice). `currentPoint` cuma terisi kalau request-nya
+// point-scoped (?pointId=). Diekspor supaya dipakai juga oleh
+// variant.controller.ts (barcode lookup, CRUD varian).
+export function withVariantSummary(variant: any, pointId?: string) {
+  const inventory = variant.inventory || [];
   const totalStock = inventory.reduce((sum: number, inv: any) => sum + inv.stock, 0);
 
   const priced = inventory.filter((inv: any) => inv.sellPrice != null);
@@ -180,7 +195,24 @@ function withStockSummary(product: any, pointId?: string) {
     }
   }
 
-  return { ...product, totalStock, priceMin, priceMax, currentPoint };
+  return { ...variant, totalStock, priceMin, priceMax, currentPoint };
+}
+
+// Gabungkan ringkasan semua varian jadi 1 ringkasan level Product (dipakai
+// kartu katalog sebelum customer pilih varian spesifik). Diekspor supaya
+// dipakai juga oleh point.controller.ts (getPointProducts, point-scoped).
+export function combineProductSummary(product: any, variants: any[]) {
+  const totalStock = variants.reduce((sum: number, v: any) => sum + v.totalStock, 0);
+  const mins = variants.map((v: any) => v.priceMin).filter((p: any): p is number => p != null);
+  const maxs = variants.map((v: any) => v.priceMax).filter((p: any): p is number => p != null);
+  const priceMin = mins.length ? Math.min(...mins) : null;
+  const priceMax = maxs.length ? Math.max(...maxs) : null;
+  return { ...product, variants, totalStock, priceMin, priceMax };
+}
+
+function withProductSummary(product: any, pointId?: string) {
+  const variants = (product.variants || []).map((v: any) => withVariantSummary(v, pointId));
+  return combineProductSummary(product, variants);
 }
 
 function slugify(text: string): string {

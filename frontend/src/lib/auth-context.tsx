@@ -10,6 +10,8 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<User>;
   register: (name: string, email: string, password: string, phone?: string) => Promise<User>;
   logout: () => void;
+  updateUser: (patch: Partial<User>) => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -57,8 +59,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  // Update sebagian data user di state lokal tanpa fetch ulang — dipakai
+  // langsung setelah PATCH /auth/me supaya Navbar/halaman lain ikut berubah seketika.
+  function updateUser(patch: Partial<User>) {
+    setUser((prev) => (prev ? { ...prev, ...patch } : prev));
+  }
+
+  // Fetch ulang data user dari server (dipakai kalau butuh data terbaru yang pasti sinkron).
+  async function refreshUser() {
+    const result = await api.get<User>("/auth/me");
+    setUser(result);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updateUser, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

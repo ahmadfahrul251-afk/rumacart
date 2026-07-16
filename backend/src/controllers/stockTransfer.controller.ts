@@ -5,7 +5,7 @@ import { checkAndCreateRestockRequest } from "../services/restockRequest.service
 import { ok, fail } from "../utils/response";
 import { scopedPointId, canAccessPoint, resolveWritePointId } from "../utils/pointScope";
 
-// POST /api/stock-transfers  { fromPointId?, toPointId, notes, items: [{productId, qty}] }
+// POST /api/stock-transfers  { fromPointId?, toPointId, notes, items: [{variantId, qty}] }
 // Admin Pusat/Gudang: bebas pilih fromPointId mana pun (atau kosongkan = mode lama
 // "dari Pusat", stok sumber tidak dipotong). Admin Lokasi (RDH/Mart/Point): fromPointId
 // otomatis dipaksa ke lokasinya sendiri — cuma bisa kirim transfer KELUAR dari situ.
@@ -27,7 +27,7 @@ export async function createTransfer(req: Request, res: Response) {
     // sampai/di bawah minStock — cek & buatkan Restock Request kalau perlu.
     if (fromPointId) {
       for (const item of items || []) {
-        await checkAndCreateRestockRequest(item.productId, fromPointId).catch(() => {});
+        await checkAndCreateRestockRequest(item.variantId, fromPointId).catch(() => {});
       }
     }
 
@@ -48,7 +48,7 @@ export async function listTransfers(req: Request, res: Response) {
 
   const transfers = await prisma.stockTransfer.findMany({
     where,
-    include: { items: true, toPoint: true, fromPoint: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, toPoint: true, fromPoint: true },
     orderBy: { createdAt: "desc" },
   });
   return ok(res, transfers);
@@ -58,7 +58,7 @@ export async function listTransfers(req: Request, res: Response) {
 export async function getTransfer(req: Request, res: Response) {
   const transfer = await prisma.stockTransfer.findUnique({
     where: { id: req.params.id },
-    include: { items: { include: { product: true } }, toPoint: true, fromPoint: true, createdBy: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, toPoint: true, fromPoint: true, createdBy: true },
   });
   if (!transfer) return fail(res, "Transfer stok tidak ditemukan", 404);
   const canAccess = canAccessPoint(req, transfer.toPointId) || canAccessPoint(req, transfer.fromPointId);

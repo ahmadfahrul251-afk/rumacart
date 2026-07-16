@@ -1,7 +1,7 @@
 import { prisma } from "../config/db";
 
 interface TransferItemInput {
-  productId: string;
+  variantId: string;
   qty: number;
 }
 
@@ -18,6 +18,7 @@ interface CreateTransferInput {
 // uang/cashflow yang tercatat, murni pemindahan stok. Kalau `fromPointId` diisi,
 // stok lokasi asal langsung dipotong saat status SENT (barang dianggap "berangkat");
 // baru bertambah di lokasi tujuan setelah dikonfirmasi lewat receiveStockTransfer().
+// (Round 18: item transfer sekarang per VARIAN, bukan per produk.)
 export async function createStockTransfer(input: CreateTransferInput) {
   if (!input.items.length) throw new Error("Item transfer tidak boleh kosong");
   if (input.fromPointId && input.fromPointId === input.toPointId) {
@@ -25,10 +26,10 @@ export async function createStockTransfer(input: CreateTransferInput) {
   }
 
   const itemsData = input.items.map((item) => {
-    if (!item.productId || !item.qty || item.qty <= 0) {
+    if (!item.variantId || !item.qty || item.qty <= 0) {
       throw new Error("Data item transfer tidak lengkap/valid");
     }
-    return { productId: item.productId, qty: item.qty };
+    return { variantId: item.variantId, qty: item.qty };
   });
   const transferNumber = generateTransferNumber();
 
@@ -36,10 +37,10 @@ export async function createStockTransfer(input: CreateTransferInput) {
     if (input.fromPointId) {
       for (const item of itemsData) {
         const inv = await tx.inventory.findUnique({
-          where: { productId_pointId: { productId: item.productId, pointId: input.fromPointId } },
+          where: { variantId_pointId: { variantId: item.variantId, pointId: input.fromPointId } },
         });
         if (!inv || inv.stock < item.qty) {
-          throw new Error("Stok di lokasi asal tidak cukup untuk salah satu produk");
+          throw new Error("Stok di lokasi asal tidak cukup untuk salah satu varian");
         }
       }
     }
@@ -54,13 +55,13 @@ export async function createStockTransfer(input: CreateTransferInput) {
         createdById: input.createdById,
         items: { create: itemsData },
       },
-      include: { items: { include: { product: true } }, toPoint: true, fromPoint: true },
+      include: { items: { include: { variant: { include: { product: true } } } }, toPoint: true, fromPoint: true },
     });
 
     if (input.fromPointId) {
       for (const item of itemsData) {
         const inv = await tx.inventory.update({
-          where: { productId_pointId: { productId: item.productId, pointId: input.fromPointId } },
+          where: { variantId_pointId: { variantId: item.variantId, pointId: input.fromPointId } },
           data: { stock: { decrement: item.qty } },
         });
         await tx.inventoryHistory.create({
@@ -93,9 +94,9 @@ export async function receiveStockTransfer(transferId: string, userId: string) {
   await prisma.$transaction(async (tx: any) => {
     for (const item of transfer.items) {
       const inv = await tx.inventory.upsert({
-        where: { productId_pointId: { productId: item.productId, pointId: transfer.toPointId } },
+        where: { variantId_pointId: { variantId: item.variantId, pointId: transfer.toPointId } },
         update: { stock: { increment: item.qty } },
-        create: { productId: item.productId, pointId: transfer.toPointId, stock: item.qty },
+        create: { variantId: item.variantId, pointId: transfer.toPointId, stock: item.qty },
       });
       await tx.inventoryHistory.create({
         data: {
@@ -122,7 +123,7 @@ export async function receiveStockTransfer(transferId: string, userId: string) {
 
   return prisma.stockTransfer.findUnique({
     where: { id: transferId },
-    include: { items: { include: { product: true } }, toPoint: true, fromPoint: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, toPoint: true, fromPoint: true },
   });
 }
 
@@ -136,7 +137,7 @@ export async function cancelStockTransfer(transferId: string) {
       // Stok sudah dipotong dari lokasi asal saat SENT — kembalikan karena batal jadi dikirim.
       for (const item of transfer.items) {
         const inv = await tx.inventory.update({
-          where: { productId_pointId: { productId: item.productId, pointId: transfer.fromPointId! } },
+          where: { variantId_pointId: { variantId: item.variantId, pointId: transfer.fromPointId! } },
           data: { stock: { increment: item.qty } },
         });
         await tx.inventoryHistory.create({

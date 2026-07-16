@@ -137,7 +137,7 @@ function PointsMonitoringContent() {
           {topProducts.length > 0 && (
             <div className="space-y-2">
               {topProducts.map((tp, i) => (
-                <div key={tp.productId} className="flex items-center justify-between text-sm">
+                <div key={tp.variantId} className="flex items-center justify-between text-sm">
                   <span className="flex items-center gap-2">
                     <span className="grid h-5 w-5 place-items-center rounded-full bg-accent text-xs font-medium text-ink/60">{i + 1}</span>
                     {tp.name}

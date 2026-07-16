@@ -2,7 +2,7 @@ import { prisma } from "../config/db";
 import { recordCashflow } from "./cashflow.service";
 
 interface PoItemInput {
-  productId: string;
+  variantId: string;
   qty: number;
   costPrice: number;
 }
@@ -22,7 +22,7 @@ export async function createPurchaseOrder(input: CreatePoInput) {
   if (!input.items.length) throw new Error("Item PO tidak boleh kosong");
 
   const itemsData = input.items.map((item) => {
-    if (!item.productId || !item.qty || item.qty <= 0 || item.costPrice == null || item.costPrice < 0) {
+    if (!item.variantId || !item.qty || item.qty <= 0 || item.costPrice == null || item.costPrice < 0) {
       throw new Error("Data item PO tidak lengkap/valid");
     }
     return { ...item, subtotal: item.qty * item.costPrice };
@@ -41,7 +41,7 @@ export async function createPurchaseOrder(input: CreatePoInput) {
       createdById: input.createdById,
       items: { create: itemsData },
     },
-    include: { items: { include: { product: true } }, supplier: true, point: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, supplier: true, point: true },
   });
 }
 
@@ -57,9 +57,9 @@ export async function receivePurchaseOrder(poId: string, userId: string) {
       // Terima PO otomatis set/refresh basePrice (harga dasar) RDH tujuan —
       // "last cost wins", sesuai harga beli terbaru dari supplier di baris PO ini.
       const inv = await tx.inventory.upsert({
-        where: { productId_pointId: { productId: item.productId, pointId: po.pointId } },
+        where: { variantId_pointId: { variantId: item.variantId, pointId: po.pointId } },
         update: { stock: { increment: item.qty }, basePrice: item.costPrice },
-        create: { productId: item.productId, pointId: po.pointId, stock: item.qty, basePrice: item.costPrice },
+        create: { variantId: item.variantId, pointId: po.pointId, stock: item.qty, basePrice: item.costPrice },
       });
       await tx.inventoryHistory.create({
         data: {
@@ -100,7 +100,7 @@ export async function receivePurchaseOrder(poId: string, userId: string) {
 
   return prisma.purchaseOrder.findUnique({
     where: { id: poId },
-    include: { items: { include: { product: true } }, supplier: true, point: true },
+    include: { items: { include: { variant: { include: { product: true } } } }, supplier: true, point: true },
   });
 }
 

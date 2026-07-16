@@ -33,9 +33,11 @@ export async function createReview(req: Request, res: Response) {
   if (!productId || !rating) return fail(res, "productId dan rating wajib diisi", 422);
   if (rating < 1 || rating > 5) return fail(res, "Rating harus antara 1-5", 422);
 
+  // Round 18: OrderItem sekarang nunjuk ke ProductVariant, bukan Product
+  // langsung. Review tetap di level Product, jadi dicek lewat variant.productId.
   const hasPurchased = await prisma.orderItem.findFirst({
     where: {
-      productId,
+      variant: { productId },
       order: { customerId: userId, status: "COMPLETED" },
     },
   });

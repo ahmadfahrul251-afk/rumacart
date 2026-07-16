@@ -73,7 +73,7 @@ export default function CartPage() {
                       <MapPin size={14} className="text-primary" /> {g.pointName} <span className="font-normal text-ink/40">({g.pointCode})</span>
                     </p>
                     {g.items.map((item) => (
-                      <div key={`${item.productId}:${item.pointId}`} className="flex items-center gap-4">
+                      <div key={`${item.variantId}:${item.pointId}`} className="flex items-center gap-4">
                         <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-accent text-xl">
                           {item.image ? (
                             // eslint-disable-next-line @next/next/no-img-element
@@ -90,17 +90,17 @@ export default function CartPage() {
                           <button
                             className="px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-30"
                             disabled={item.qty <= 1}
-                            onClick={() => buyNow.updateQty(item.productId, item.pointId, item.qty - 1)}
+                            onClick={() => buyNow.updateQty(item.variantId, item.pointId, item.qty - 1)}
                             aria-label="Kurangi jumlah"
                           >
                             −
                           </button>
                           <span className="w-8 text-center text-sm">{item.qty}</span>
-                          <button className="px-3 py-1.5" onClick={() => buyNow.updateQty(item.productId, item.pointId, item.qty + 1)} aria-label="Tambah jumlah">
+                          <button className="px-3 py-1.5" onClick={() => buyNow.updateQty(item.variantId, item.pointId, item.qty + 1)} aria-label="Tambah jumlah">
                             +
                           </button>
                         </div>
-                        <button onClick={() => buyNow.removeItem(item.productId, item.pointId)} className="text-ink/40 hover:text-red-600" aria-label="Hapus dari keranjang">
+                        <button onClick={() => buyNow.removeItem(item.variantId, item.pointId)} className="text-ink/40 hover:text-red-600" aria-label="Hapus dari keranjang">
                           <Trash2 size={18} />
                         </button>
                       </div>
@@ -150,7 +150,7 @@ export default function CartPage() {
             <div className="space-y-3">
               <p className="text-sm text-ink/50">Belum terikat Point — pilih Point-nya nanti pas dipindahkan ke Keranjang Beli Sekarang.</p>
               {planned.items.map((item) => (
-                <div key={item.productId} className="card flex items-center gap-4">
+                <div key={item.variantId} className="card flex items-center gap-4">
                   <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl bg-accent text-xl">
                     {item.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -167,13 +167,13 @@ export default function CartPage() {
                     <button
                       className="px-3 py-1.5 disabled:cursor-not-allowed disabled:opacity-30"
                       disabled={item.qty <= 1}
-                      onClick={() => planned.updateQty(item.productId, item.qty - 1)}
+                      onClick={() => planned.updateQty(item.variantId, item.qty - 1)}
                       aria-label="Kurangi jumlah"
                     >
                       −
                     </button>
                     <span className="w-8 text-center text-sm">{item.qty}</span>
-                    <button className="px-3 py-1.5" onClick={() => planned.updateQty(item.productId, item.qty + 1)} aria-label="Tambah jumlah">
+                    <button className="px-3 py-1.5" onClick={() => planned.updateQty(item.variantId, item.qty + 1)} aria-label="Tambah jumlah">
                       +
                     </button>
                   </div>
@@ -183,7 +183,7 @@ export default function CartPage() {
                   >
                     Pindah ke Keranjang <ArrowRight size={13} />
                   </button>
-                  <button onClick={() => planned.removeItem(item.productId)} className="text-ink/40 hover:text-red-600" aria-label="Hapus dari rencana">
+                  <button onClick={() => planned.removeItem(item.variantId)} className="text-ink/40 hover:text-red-600" aria-label="Hapus dari rencana">
                     <Trash2 size={18} />
                   </button>
                 </div>
@@ -195,13 +195,13 @@ export default function CartPage() {
 
       {moveItem && (
         <PointPickerModal
-          productId={moveItem.productId}
+          variantId={moveItem.variantId}
           productName={moveItem.name}
           qty={moveItem.qty}
           onClose={() => setMoveItem(null)}
           onConfirm={(point) => {
             buyNow.addItem({
-              productId: moveItem.productId,
+              variantId: moveItem.variantId,
               name: moveItem.name,
               price: moveItem.price,
               image: moveItem.image,
@@ -210,7 +210,7 @@ export default function CartPage() {
               pointName: point.name,
               pointCode: point.code,
             });
-            planned.removeItem(moveItem.productId);
+            planned.removeItem(moveItem.variantId);
             setMoveItem(null);
             setTab("BUY");
           }}

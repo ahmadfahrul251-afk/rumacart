@@ -1,16 +1,17 @@
 import { prisma } from "../config/db";
 import { createStockTransfer } from "./stockTransfer.service";
 
-// Dipanggil setelah stok 1 produk di 1 lokasi berkurang (penjualan, stock-out,
+// Dipanggil setelah stok 1 VARIAN di 1 lokasi berkurang (penjualan, stock-out,
 // transfer keluar, dst). Kalau stoknya sudah di/bawah minStock DAN belum ada
-// Restock Request yang masih PENDING/APPROVED untuk produk+lokasi yang sama,
-// sistem otomatis bikin satu — inilah "Smart Restock".
-export async function checkAndCreateRestockRequest(productId: string, pointId: string) {
-  const inv = await prisma.inventory.findUnique({ where: { productId_pointId: { productId, pointId } } });
+// Restock Request yang masih PENDING/APPROVED untuk varian+lokasi yang sama,
+// sistem otomatis bikin satu — inilah "Smart Restock". (Round 18: per varian,
+// bukan per produk, karena tiap varian punya stok sendiri.)
+export async function checkAndCreateRestockRequest(variantId: string, pointId: string) {
+  const inv = await prisma.inventory.findUnique({ where: { variantId_pointId: { variantId, pointId } } });
   if (!inv || inv.stock > inv.minStock) return null;
 
   const existing = await prisma.restockRequest.findFirst({
-    where: { productId, pointId, status: { in: ["PENDING", "APPROVED"] } },
+    where: { variantId, pointId, status: { in: ["PENDING", "APPROVED"] } },
   });
   if (existing) return null;
 
@@ -26,7 +27,7 @@ export async function checkAndCreateRestockRequest(productId: string, pointId: s
     data: {
       requestNumber,
       pointId,
-      productId,
+      variantId,
       qty,
       isAuto: true,
       sourceHubId: point.parentHubId, // auto-saran: RDH/Mart induk lokasi ini
@@ -37,7 +38,7 @@ export async function checkAndCreateRestockRequest(productId: string, pointId: s
 
 interface ManualRestockInput {
   pointId: string;
-  productId: string;
+  variantId: string;
   qty: number;
   sourceHubId?: string;
   note?: string;
@@ -50,13 +51,13 @@ export async function createManualRestockRequest(input: ManualRestockInput) {
     data: {
       requestNumber,
       pointId: input.pointId,
-      productId: input.productId,
+      variantId: input.variantId,
       qty: input.qty,
       sourceHubId: input.sourceHubId,
       note: input.note,
       isAuto: false,
     },
-    include: { point: true, sourceHub: true, product: true },
+    include: { point: true, sourceHub: true, variant: { include: { product: true } } },
   });
 }
 
@@ -93,7 +94,7 @@ export async function fulfillRestockRequest(id: string, userId: string) {
     fromPointId: req.sourceHubId,
     toPointId: req.pointId,
     notes: `Fulfill Restock Request ${req.requestNumber}`,
-    items: [{ productId: req.productId, qty: req.qty }],
+    items: [{ variantId: req.variantId, qty: req.qty }],
     createdById: userId,
   });
 

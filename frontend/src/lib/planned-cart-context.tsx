@@ -6,8 +6,8 @@ import { CartItem } from "@/types";
 interface PlannedCartContextValue {
   items: CartItem[];
   addItem: (item: CartItem) => void;
-  updateQty: (productId: string, qty: number) => void;
-  removeItem: (productId: string) => void;
+  updateQty: (variantId: string, qty: number) => void;
+  removeItem: (variantId: string) => void;
   clearCart: () => void;
   subtotal: number;
 }
@@ -15,11 +15,11 @@ interface PlannedCartContextValue {
 const PlannedCartContext = createContext<PlannedCartContextValue | undefined>(undefined);
 const STORAGE_KEY = "rumacart_planned_cart";
 
-// Keranjang "Rencana Belanja" — daftar produk yang mau dibeli NANTI, mirip
-// wishlist tapi ada jumlah (qty). Sengaja TIDAK terikat ke Point sama sekali
-// (beda dari Keranjang Beli Sekarang) — Point baru dipilih pas item ini
+// Keranjang "Rencana Belanja" — daftar varian produk yang mau dibeli NANTI,
+// mirip wishlist tapi ada jumlah (qty). Sengaja TIDAK terikat ke Point sama
+// sekali (beda dari Keranjang Beli Sekarang) — Point baru dipilih pas item ini
 // dipindahkan ke Keranjang Beli Sekarang lewat tombol "Pindah ke Keranjang"
-// di halaman /cart.
+// di halaman /cart. (Round 18: kunci per varian, bukan per produk.)
 export function PlannedCartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -36,22 +36,22 @@ export function PlannedCartProvider({ children }: { children: ReactNode }) {
 
   function addItem(item: CartItem) {
     setItems((prev) => {
-      const existing = prev.find((i) => i.productId === item.productId);
+      const existing = prev.find((i) => i.variantId === item.variantId);
       if (existing) {
-        return prev.map((i) => (i.productId === item.productId ? { ...i, qty: i.qty + item.qty } : i));
+        return prev.map((i) => (i.variantId === item.variantId ? { ...i, qty: i.qty + item.qty } : i));
       }
       return [...prev, item];
     });
   }
 
-  function updateQty(productId: string, qty: number) {
+  function updateQty(variantId: string, qty: number) {
     setItems((prev) =>
-      qty <= 0 ? prev.filter((i) => i.productId !== productId) : prev.map((i) => (i.productId === productId ? { ...i, qty } : i))
+      qty <= 0 ? prev.filter((i) => i.variantId !== variantId) : prev.map((i) => (i.variantId === variantId ? { ...i, qty } : i))
     );
   }
 
-  function removeItem(productId: string) {
-    setItems((prev) => prev.filter((i) => i.productId !== productId));
+  function removeItem(variantId: string) {
+    setItems((prev) => prev.filter((i) => i.variantId !== variantId));
   }
 
   function clearCart() {

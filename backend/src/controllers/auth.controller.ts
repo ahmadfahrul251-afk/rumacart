@@ -17,6 +17,17 @@ const loginSchema = z.object({
   password: z.string(),
 });
 
+const updateMeSchema = z.object({
+  name: z.string().min(2, "Nama minimal 2 karakter").optional(),
+  phone: z.string().optional().nullable(),
+  image: z.string().url("URL gambar tidak valid").optional().nullable(),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Password saat ini wajib diisi"),
+  newPassword: z.string().min(6, "Password baru minimal 6 karakter"),
+});
+
 // POST /api/auth/register
 // Role selalu CUSTOMER lewat endpoint ini — role lain (Admin, Kasir, dst)
 // hanya bisa dibuat oleh Super Admin lewat menu User Management.
@@ -74,6 +85,39 @@ export async function me(req: Request, res: Response) {
   });
   if (!user) return fail(res, "User tidak ditemukan", 404);
   return ok(res, sanitize(user));
+}
+
+// PATCH /api/auth/me — customer/staff edit profil sendiri (nama, no HP, avatar).
+// Sengaja terpisah dari user.controller.ts (yang khusus Admin mengelola akun staff
+// orang lain) supaya siapa pun yang login bisa edit datanya sendiri tanpa perlu role admin.
+export async function updateMe(req: Request, res: Response) {
+  const parsed = updateMeSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, "Data tidak valid", 422, parsed.error.flatten());
+
+  const user = await prisma.user.update({
+    where: { id: req.user!.userId },
+    data: parsed.data,
+    include: { managedPoint: { select: { id: true, name: true, code: true, type: true, parentHubId: true } } },
+  });
+  return ok(res, sanitize(user), "Profil berhasil diperbarui");
+}
+
+// PATCH /api/auth/me/password — ganti password sendiri, wajib konfirmasi password lama
+// dulu (beda dari reset password oleh Admin di user.controller.ts yang tidak butuh ini).
+export async function changePassword(req: Request, res: Response) {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, "Data tidak valid", 422, parsed.error.flatten());
+  const { currentPassword, newPassword } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
+  if (!user) return fail(res, "User tidak ditemukan", 404);
+
+  const isMatch = await comparePassword(currentPassword, user.passwordHash);
+  if (!isMatch) return fail(res, "Password saat ini salah", 401);
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  return ok(res, null, "Password berhasil diganti");
 }
 
 // Jangan pernah kirim passwordHash ke frontend

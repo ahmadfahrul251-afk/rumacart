@@ -23,6 +23,7 @@ function NewProductContent() {
 
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [variantName, setVariantName] = useState("Default");
   const [sku, setSku] = useState("");
   const [barcode, setBarcode] = useState("");
   const [weightGram, setWeightGram] = useState(0);
@@ -65,6 +66,7 @@ function NewProductContent() {
       const product = await api.post<{ slug: string }>("/products", {
         name,
         categoryId,
+        variantName: variantName || "Default",
         sku,
         barcode: barcode || undefined,
         weightGram,
@@ -90,9 +92,10 @@ function NewProductContent() {
       </button>
       <h1 className="mb-6 text-2xl font-bold">Tambah Produk</h1>
       <p className="mb-6 max-w-2xl text-sm text-ink/50">
-        Produk baru masuk ke katalog pusat (tanpa harga). Tiap RDH/Mart/Point yang mau menjualnya perlu
-        "klaim" produk ini dulu di halaman Produk mereka masing-masing — harga dasar (RDH) atau harga
-        jual (Mart/Point) diatur saat klaim.
+        Produk baru masuk ke katalog pusat sekalian dengan 1 varian pertamanya (tanpa harga). Tiap
+        RDH/Mart/Point yang mau menjualnya perlu "klaim" varian ini dulu di halaman Produk mereka
+        masing-masing — harga dasar (RDH) atau harga jual (Mart/Point) diatur saat klaim. Kalau produk ini
+        nanti punya varian rasa/ukuran lain, tambahkan lewat "Kelola Varian" di halaman edit produk.
       </p>
 
       <form onSubmit={handleSubmit} className="grid gap-6 md:grid-cols-3">
@@ -142,14 +145,25 @@ function NewProductContent() {
               ))}
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-sm font-medium">SKU *</label>
-              <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Contoh: BRS-5KG-001" />
+          <div className="rounded-xl border border-dashed border-black/15 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink/40">Varian Pertama</p>
+            <div className="mb-3">
+              <label className="mb-1 block text-sm font-medium">Nama Varian</label>
+              <Input
+                value={variantName}
+                onChange={(e) => setVariantName(e.target.value)}
+                placeholder='Contoh: "Original", "85g" — kosongkan kalau produk ini tidak punya varian rasa/ukuran lain'
+              />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Barcode</label>
-              <Input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Opsional, untuk scan Kasir" />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">SKU *</label>
+                <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Contoh: BRS-5KG-001" />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">Barcode</label>
+                <Input value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Opsional, untuk scan Kasir" />
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

@@ -23,23 +23,23 @@ export async function listRestockRequests(req: Request, res: Response) {
 
   const requests = await prisma.restockRequest.findMany({
     where,
-    include: { point: true, sourceHub: true, product: true },
+    include: { point: true, sourceHub: true, variant: { include: { product: true } } },
     orderBy: { createdAt: "desc" },
   });
   return ok(res, requests);
 }
 
-// POST /api/restock-requests  { productId, qty, pointId?, sourceHubId?, note? }
+// POST /api/restock-requests  { variantId, qty, pointId?, sourceHubId?, note? }
 // Admin Lokasi: pointId otomatis dikunci ke lokasinya sendiri (permintaan restock
 // buat lokasinya). Admin Pusat: wajib isi pointId (mengajukan atas nama lokasi tertentu).
 export async function createRestockRequest(req: Request, res: Response) {
   try {
-    const { productId, qty, sourceHubId, note } = req.body;
+    const { variantId, qty, sourceHubId, note } = req.body;
     const pointId = resolveWritePointId(req, req.body.pointId);
     if (!pointId) return fail(res, "Lokasi peminta wajib diisi", 422);
-    if (!productId) return fail(res, "Produk wajib dipilih", 422);
+    if (!variantId) return fail(res, "Varian produk wajib dipilih", 422);
 
-    const request = await createManualRestockRequest({ pointId, productId, qty: Number(qty), sourceHubId, note });
+    const request = await createManualRestockRequest({ pointId, variantId, qty: Number(qty), sourceHubId, note });
     return ok(res, request, "Restock Request dibuat", 201);
   } catch (err: any) {
     return fail(res, err.message || "Gagal membuat Restock Request", 400);

@@ -127,6 +127,7 @@ model User {
   email          String   @unique
   passwordHash   String
   phone          String?
+  image          String? // URL avatar (Cloudinary) — dipakai customer, opsional
   role           Role     @default(CUSTOMER)
   managedPointId String?  // hanya diisi untuk role ADMIN_POINT — Point yang dikelola
   isActive       Boolean  @default(true)
@@ -186,6 +187,12 @@ model Category {
   @@map("categories")
 }
 
+// Product = "induk" produk (nama, kategori, brand, kata kunci pencarian, foto
+// default) — TIDAK punya SKU/barcode/harga/stok sendiri lagi sejak varian
+// diperkenalkan. 1 Product WAJIB punya minimal 1 ProductVariant (kalau produk
+// tidak punya varian sungguhan, tetap dibuatkan 1 varian "default" — supaya
+// SEMUA unit yang benar-benar dijual/di-stok selalu lewat ProductVariant,
+// tidak ada 2 cara berbeda untuk hal yang sama).
 model Product {
   id            String   @id @default(cuid())
   name          String
@@ -193,29 +200,49 @@ model Product {
   description   String?
   categoryId    String
   brand         String?
-  sku           String   @unique
-  barcode       String?  @unique
-  weightGram    Int      @default(0)
-  lengthCm      Float?   // dimensi paket, dipakai estimasi ongkir/packing
-  widthCm       Float?
-  heightCm      Float?
   searchKeywords String? // kata kunci tambahan (dipisah koma) biar gampang ditemukan pencarian, contoh "mie instan pedas rendang"
-  minStock      Int      @default(5)
+  minStock      Int      @default(5) // nilai default dipakai saat bikin ProductVariant baru
   images        String[] @default([])
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  category   Category    @relation(fields: [categoryId], references: [id])
-  inventory  Inventory[]
-  orderItems OrderItem[]
-  wishlist   Wishlist[]
-  reviews    Review[]
-  purchaseOrderItems PurchaseOrderItem[]
-  stockTransferItems StockTransferItem[]
-  restockRequests     RestockRequest[]
+  category Category         @relation(fields: [categoryId], references: [id])
+  variants ProductVariant[]
+  wishlist Wishlist[]
+  reviews  Review[]
 
   @@map("products")
+}
+
+// ProductVariant = unit yang BENAR-BENAR dijual & di-stok (contoh: "Original",
+// "Pedas Level 3", "Karton isi 40"). SKU/barcode/berat/dimensi/harga/stok
+// semuanya di level ini, BUKAN di Product — karena tiap varian bisa beda
+// fisik & beda harga meskipun "produk"-nya sama.
+model ProductVariant {
+  id         String   @id @default(cuid())
+  productId  String
+  name       String   // nama varian, contoh: "Original", "Pedas", "85g", "Karton isi 40"
+  sku        String   @unique
+  barcode    String?  @unique
+  weightGram Int      @default(0)
+  lengthCm   Float?   // dimensi paket, dipakai estimasi ongkir/packing
+  widthCm    Float?
+  heightCm   Float?
+  minStock   Int      @default(5)
+  image      String?  // opsional — override foto default Product kalau varian ini beda tampilan
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  product    Product             @relation(fields: [productId], references: [id])
+  inventory  Inventory[]
+  orderItems OrderItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stockTransferItems StockTransferItem[]
+  restockRequests    RestockRequest[]
+
+  @@map("product_variants")
 }
 
 // ================== WISHLIST & REVIEW ==================
@@ -307,7 +334,7 @@ model DeliveryArea {
 
 model Inventory {
   id        String   @id @default(cuid())
-  productId String
+  variantId String
   pointId   String
   stock     Int      @default(0)
   minStock  Int      @default(5)
@@ -327,11 +354,11 @@ model Inventory {
 
   updatedAt DateTime @updatedAt
 
-  product Product          @relation(fields: [productId], references: [id])
+  variant ProductVariant   @relation(fields: [variantId], references: [id])
   point   FulfillmentPoint @relation(fields: [pointId], references: [id])
   history InventoryHistory[]
 
-  @@unique([productId, pointId])
+  @@unique([variantId, pointId])
   @@map("inventory")
 }
 
@@ -427,13 +454,13 @@ model OrderStatusHistory {
 model OrderItem {
   id        String @id @default(cuid())
   orderId   String
-  productId String
+  variantId String
   qty       Int
   price     Int    // harga satuan saat order dibuat (snapshot)
   subtotal  Int
 
-  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id])
+  order   Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
 
   @@map("order_items")
 }
@@ -520,13 +547,13 @@ model PurchaseOrder {
 model PurchaseOrderItem {
   id        String @id @default(cuid())
   poId      String
-  productId String
+  variantId String
   qty       Int
   costPrice Int    // harga beli satuan saat PO dibuat (snapshot)
   subtotal  Int
 
-  po      PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  product Product       @relation(fields: [productId], references: [id])
+  po      PurchaseOrder  @relation(fields: [poId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id])
 
   @@map("purchase_order_items")
 }
@@ -560,11 +587,11 @@ model StockTransfer {
 model StockTransferItem {
   id         String @id @default(cuid())
   transferId String
-  productId  String
+  variantId  String
   qty        Int
 
-  transfer StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
-  product  Product       @relation(fields: [productId], references: [id])
+  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id])
 
   @@map("stock_transfer_items")
 }
@@ -578,7 +605,7 @@ model RestockRequest {
   id            String                @id @default(cuid())
   requestNumber String                @unique
   pointId       String                // lokasi yang butuh restock
-  productId     String
+  variantId     String
   qty           Int                   // jumlah yang diminta
   status        RestockRequestStatus  @default(PENDING)
   sourceHubId   String?               // lokasi yang akan mensuplai (biasanya RDH/Mart induk)
@@ -591,7 +618,7 @@ model RestockRequest {
 
   point     FulfillmentPoint  @relation("RestockPoint", fields: [pointId], references: [id])
   sourceHub FulfillmentPoint? @relation("RestockSource", fields: [sourceHubId], references: [id])
-  product   Product           @relation(fields: [productId], references: [id])
+  variant   ProductVariant    @relation(fields: [variantId], references: [id])
 
   @@map("restock_requests")
 }

@@ -89,7 +89,12 @@ function PurchaseOrderDetailContent() {
           <tbody>
             {po.items.map((item) => (
               <tr key={item.id} className="border-t border-black/5">
-                <td className="py-2">{item.product?.name || item.productId}</td>
+                <td className="py-2">
+                  {item.variant?.product?.name || item.variantId}
+                  {item.variant?.name && item.variant.name !== "Default" && (
+                    <span className="text-ink/40"> ({item.variant.name})</span>
+                  )}
+                </td>
                 <td className="py-2">{item.qty}</td>
                 <td className="py-2">{formatRupiah(item.costPrice)}</td>
                 <td className="py-2 text-right">{formatRupiah(item.subtotal)}</td>

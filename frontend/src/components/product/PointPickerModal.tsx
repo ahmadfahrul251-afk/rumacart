@@ -8,20 +8,20 @@ import { Address, EligiblePoint } from "@/types";
 import { formatRupiah } from "@/lib/utils";
 
 interface Props {
-  productName: string;
-  productId: string;
+  productName: string; // label ditampilkan di modal — biasanya "Nama Produk (Nama Varian)"
+  variantId: string;
   qty: number;
   onConfirm: (point: { pointId: string; name: string; code: string; price?: number | null }) => void;
   onClose: () => void;
 }
 
-// Modal pilih Point/Pickup Point untuk 1 produk — dipakai saat customer klik
-// "Beli Sekarang" di kartu produk atau halaman detail. Daftar Point-nya pakai
-// endpoint yang sama dengan Smart Order Routing di checkout (/points/eligible):
-// Point diprioritaskan dulu (lalu Mart), diurutkan dari yang terdekat dengan
-// alamat utama customer. Kalau semua Point/Mart kosong, tetap ditawarkan Back
-// Order dari RDH.
-export function PointPickerModal({ productName, productId, qty, onConfirm, onClose }: Props) {
+// Modal pilih Point/Pickup Point untuk 1 varian produk — dipakai saat customer
+// klik "Beli Sekarang" di kartu produk atau halaman detail. Daftar Point-nya
+// pakai endpoint yang sama dengan Smart Order Routing di checkout
+// (/points/eligible): Point diprioritaskan dulu (lalu Mart), diurutkan dari
+// yang terdekat dengan alamat utama customer. Kalau semua Point/Mart kosong,
+// tetap ditawarkan Back Order dari RDH.
+export function PointPickerModal({ productName, variantId, qty, onConfirm, onClose }: Props) {
   const { user } = useAuth();
   const [points, setPoints] = useState<EligiblePoint[] | null>(null);
   const [error, setError] = useState("");
@@ -44,7 +44,7 @@ export function PointPickerModal({ productName, productId, qty, onConfirm, onClo
       }
       try {
         const res = await api.post<EligiblePoint[]>("/points/eligible", {
-          items: [{ productId, qty }],
+          items: [{ variantId, qty }],
           addressId,
         });
         if (cancelled) return;
@@ -62,7 +62,7 @@ export function PointPickerModal({ productName, productId, qty, onConfirm, onClo
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productId, qty]);
+  }, [variantId, qty]);
 
   function handleConfirm() {
     const point = points?.find((p) => p.pointId === selected);

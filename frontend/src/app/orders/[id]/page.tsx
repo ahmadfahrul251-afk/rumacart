@@ -129,7 +129,10 @@ export default function OrderTrackingPage() {
               <div className="space-y-2">
                 {order.items.map((it) => (
                   <div key={it.id} className="flex justify-between text-sm">
-                    <span className="text-ink/70">{it.product?.name || "Produk"} x{it.qty}</span>
+                    <span className="text-ink/70">
+                      {it.variant?.product?.name || "Produk"}
+                      {it.variant?.name && it.variant.name !== "Default" && <> ({it.variant.name})</>} x{it.qty}
+                    </span>
                     <span>{formatRupiah(it.subtotal)}</span>
                   </div>
                 ))}

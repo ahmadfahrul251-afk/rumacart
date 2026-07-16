@@ -20,11 +20,21 @@ function formatRupiah(n: number) {
   return "Rp" + n.toLocaleString("id-ID");
 }
 
+// Round 18: 1 baris order sekarang merujuk ke ProductVariant, bukan Product
+// langsung. Tampilkan nama produk + nama varian (kecuali variannya "Default",
+// biar produk tanpa varian rasa/ukuran nyata tidak tampil aneh di struk/invoice).
+function itemLabel(item: any): string {
+  const productName = item.variant?.product?.name || "Produk";
+  const variantName = item.variant?.name;
+  if (!variantName || variantName === "Default") return productName;
+  return `${productName} (${variantName})`;
+}
+
 async function loadOrderForDocument(id: string) {
   return prisma.order.findUnique({
     where: { id },
     include: {
-      items: { include: { product: true } },
+      items: { include: { variant: { include: { product: true } } } },
       point: true,
       address: true,
       customer: true,
@@ -99,7 +109,7 @@ export async function downloadInvoice(req: Request, res: Response) {
 
   doc.font("Helvetica").fontSize(9).fillColor("#202020");
   for (const item of order.items) {
-    doc.text(item.product?.name || "Produk", 50, y, { width: 280 });
+    doc.text(itemLabel(item), 50, y, { width: 280 });
     doc.text(String(item.qty), 330, y, { width: 40, align: "right" });
     doc.text(formatRupiah(item.price), 375, y, { width: 80, align: "right" });
     doc.text(formatRupiah(item.subtotal), 460, y, { width: 85, align: "right" });
@@ -158,7 +168,7 @@ export async function downloadReceipt(req: Request, res: Response) {
   doc.font("Helvetica").text("-".repeat(34), { ...center });
 
   for (const item of order.items) {
-    doc.fontSize(8).text(item.product?.name || "Produk", { width: width - 24 });
+    doc.fontSize(8).text(itemLabel(item), { width: width - 24 });
     doc.text(`${item.qty} x ${formatRupiah(item.price)}`, { continued: true, width: width - 24 });
     doc.text(formatRupiah(item.subtotal), { align: "right" });
   }
